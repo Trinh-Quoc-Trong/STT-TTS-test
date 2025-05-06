@@ -1,5 +1,7 @@
-
 import speech_recognition as sr
+import os
+from pydub import AudioSegment
+import tempfile
 
 def speech_to_text_from_file(file_path, language="vi-VN"):
     """
@@ -16,8 +18,27 @@ def speech_to_text_from_file(file_path, language="vi-VN"):
     recognizer = sr.Recognizer()
     
     try:
+        # Kiểm tra định dạng file
+        file_ext = os.path.splitext(file_path)[1].lower()
+        
+        if file_ext == '.mp3':
+            print(f"Đang chuyển đổi file MP3 sang WAV...")
+            # Tạo temporary file
+            temp_wav = tempfile.NamedTemporaryFile(delete=False, suffix='.wav')
+            temp_wav.close()
+            
+            # Chuyển đổi MP3 sang WAV
+            sound = AudioSegment.from_mp3(file_path)
+            sound.export(temp_wav.name, format="wav")
+            
+            # Cập nhật đường dẫn file
+            audio_file_path = temp_wav.name
+            print(f"Đã chuyển đổi sang {audio_file_path}")
+        else:
+            audio_file_path = file_path
+        
         # Mở file âm thanh 
-        with sr.AudioFile(file_path) as source:
+        with sr.AudioFile(audio_file_path) as source:
             # Đọc toàn bộ file âm thanh
             audio_data = recognizer.record(source)
             
@@ -26,10 +47,15 @@ def speech_to_text_from_file(file_path, language="vi-VN"):
                 text = recognizer.recognize_google(audio_data, language=language)
                 print("Nội dung file âm thanh:")
                 print(text)
+                
+                # Xóa temp file nếu đã tạo
+                if file_ext == '.mp3' and os.path.exists(temp_wav.name):
+                    os.unlink(temp_wav.name)
+                    
                 return text
             
             except sr.UnknownValueError:
-                print("Không thể nhận dạng âm thanh từ file")
+                print("Không thể nhận dạng âm thanh từ file.")
                 return None
             
             except sr.RequestError as e:
@@ -45,5 +71,5 @@ def speech_to_text_from_file(file_path, language="vi-VN"):
         return None
 
 # Ví dụ sử dụng
-file_path = r"[FIL20] Practice 10, 11.mp3"
+file_path = r"D:\code\phanMemDoc\[TE] L15_Practice 2.mp3"
 result = speech_to_text_from_file(file_path)
