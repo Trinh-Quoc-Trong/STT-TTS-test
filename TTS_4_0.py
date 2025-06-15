@@ -14,13 +14,14 @@ import sys
 
 # --- CẤU HÌNH ---
 # Luôn cố gắng tạo 10 luồng, trừ khi văn bản quá ngắn (<50 từ)
-NUM_THREADS = 10
+NUM_THREADS = 35
 DELAY_BETWEEN_REQUESTS = 2 # Giây. Tăng giá trị này nếu vẫn gặp lỗi 429.
 # -----------------
 
-language_ = "vi"
+language_ = "vi" # "vi" or "en" chọn ngôn ngữ
 try:
     with open("what_do_you_want_to_read.txt", "r", encoding = "utf8") as file:
+        # Đọc văn bản từ file what_do_you_want_to_read.txt
         text = file.read()
         if not text.strip():
             print("Lỗi: File 'what_do_you_want_to_read.txt' không có nội dung. Dừng chương trình.")
@@ -66,12 +67,14 @@ def split_text_by_word_count(text_to_split: str, num_chunks: int, min_word_thres
     return [c for c in chunks if c]
 
 
-def text_to_audio_chunk(text_chunk, index, language, temp_dir):
+def text_to_audio_chunk(text_chunk, index, language, temp_dir, status_report, status_lock):
     """Chuyển một đoạn văn bản thành file audio và lưu vào thư mục tạm."""
     try:
+        with status_lock:
+            status_report[index]["download_status"] = "Đang xử lý"
+
         if not text_chunk:
-            print(f"Luồng {index}: Không có văn bản để xử lý.")
-            return
+            raise ValueError("Chunk văn bản rỗng.")
 
         # Dàn cách các yêu cầu để tránh bị giới hạn tốc độ (rate limiting)
         sleep_time = index * DELAY_BETWEEN_REQUESTS
@@ -90,32 +93,45 @@ def text_to_audio_chunk(text_chunk, index, language, temp_dir):
         os.rename(temp_file_path_tmp, final_temp_path)
         
         print(f"Luồng {index}: Đã lưu chunk vào {final_temp_path}")
+        with status_lock:
+            status_report[index]["download_status"] = "Thành công"
     except Exception as e:
-        print(f"Lỗi trong luồng {index}: {e}")
+        error_message = f"Lỗi trong luồng {index}: {e}"
+        print(error_message)
+        with status_lock:
+            status_report[index]["download_status"] = "Thất bại"
+            status_report[index]["error"] = error_message
 
-def progressive_merger(temp_dir, num_chunks, final_audio_path):
+def progressive_merger(temp_dir, num_chunks, final_audio_path, status_report, status_lock):
     """
     Theo dõi và ghép các file audio ngay khi chúng sẵn sàng theo đúng thứ tự.
     Chạy trong một luồng riêng.
     """
     print("Tiến trình ghép file bắt đầu chạy song song.")
     combined_audio = AudioSegment.empty()
-    files_merged_count = 0
+    files_processed_count = 0
     
-    # Vòng lặp sẽ tiếp tục cho đến khi tất cả các chunk được ghép
-    while files_merged_count < num_chunks:
-        chunk_file_path = os.path.join(temp_dir, f"temp_{files_merged_count}.mp3")
+    # Vòng lặp sẽ tiếp tục cho đến khi tất cả các chunk được xử lý (ghép hoặc bỏ qua)
+    while files_processed_count < num_chunks:
+        current_chunk_index = files_processed_count
+        chunk_file_path = os.path.join(temp_dir, f"temp_{current_chunk_index}.mp3")
         
-        # Chờ file tiếp theo trong chuỗi xuất hiện và có nội dung
-        if os.path.exists(chunk_file_path) and os.path.getsize(chunk_file_path) > 0:
+        is_downloaded = os.path.exists(chunk_file_path) and os.path.getsize(chunk_file_path) > 0
+        
+        with status_lock:
+            is_failed = status_report[current_chunk_index]['download_status'] == 'Thất bại'
+
+        if is_downloaded:
             try:
                 # Đợi một chút để đảm bảo file đã được ghi xong hoàn toàn
                 time.sleep(0.2) 
                 segment = AudioSegment.from_mp3(chunk_file_path)
                 combined_audio += segment
-                print(f"-> Đã ghép xong chunk {files_merged_count + 1}/{num_chunks}.")
+                print(f"-> Đã ghép xong chunk {current_chunk_index + 1}/{num_chunks}.")
+                with status_lock:
+                    status_report[current_chunk_index]["merge_status"] = "Đã ghép"
                 
-                # Xóa file tạm ngay sau khi ghép, có cơ chế thử lại để tránh lỗi file bị khóa
+                # Xóa file tạm ngay sau khi ghép
                 deleted = False
                 for i in range(3): # Thử tối đa 3 lần
                     try:
@@ -123,26 +139,63 @@ def progressive_merger(temp_dir, num_chunks, final_audio_path):
                         deleted = True
                         break
                     except OSError:
-                        time.sleep(0.5) # Đợi 0.5 giây rồi thử lại
-                
+                        time.sleep(0.5)
                 if not deleted:
-                    print(f"CẢNH BÁO: Không thể xóa file tạm {chunk_file_path}. File này sẽ được dọn dẹp sau.")
+                    print(f"CẢNH BÁO: Không thể xóa file tạm {chunk_file_path}.")
 
-                files_merged_count += 1
+                files_processed_count += 1
             except Exception as e:
-                # Có thể file đang được ghi dở, hoặc bị lỗi. Đợi và thử lại.
-                print(f"Lỗi khi xử lý file {chunk_file_path}: {e}. Sẽ thử lại sau giây lát.")
-                time.sleep(1)
+                error_message = f"Lỗi khi xử lý file {chunk_file_path}: {e}"
+                print(error_message)
+                with status_lock:
+                    status_report[current_chunk_index]['merge_status'] = 'Lỗi ghép file'
+                    status_report[current_chunk_index]['error'] = error_message
+                files_processed_count += 1 # Bỏ qua chunk này và tiếp tục
+        elif is_failed:
+            print(f"-> Bỏ qua chunk {current_chunk_index + 1}/{num_chunks} do lỗi tải về.")
+            with status_lock:
+                status_report[current_chunk_index]['merge_status'] = 'Bỏ qua'
+            files_processed_count += 1
         else:
             # File chưa sẵn sàng, đợi một chút rồi kiểm tra lại
             time.sleep(0.5)
 
-    # Lưu file cuối cùng khi đã ghép tất cả
+    # Lưu file cuối cùng khi đã ghép tất cả các chunk thành công
     if len(combined_audio) > 0:
         print(f"Đã ghép xong tất cả. Lưu file vào: {final_audio_path}")
         combined_audio.export(final_audio_path, format="mp3")
     else:
         print("Không có file audio nào được tạo ra để ghép.")
+
+def print_summary_table(status_report):
+    """In bảng tóm tắt trạng thái các luồng."""
+    print("\n\n" + "="*78)
+    print("BẢNG TÓM TẮT KẾT QUẢ".center(78))
+    print("="*78)
+    print(f"| {'Chunk':<5} | {'Trạng thái Tải về':<25} | {'Trạng thái Ghép file':<25} | {'Ghi chú':<15} |")
+    print(f"|{'-'*7}|{'-'*27}|{'-'*27}|{'-'*17}|")
+    
+    all_successful = True
+    for report in status_report:
+        chunk_id = report['id'] + 1
+        download_status = report['download_status']
+        merge_status = report['merge_status']
+        error_msg = "Có lỗi" if report['error'] else "OK"
+        
+        if download_status != "Thành công":
+             all_successful = False
+        if merge_status not in ["Đã ghép", "Bỏ qua"]:
+             all_successful = False
+            
+        print(f"| {chunk_id:<5} | {download_status:<25} | {merge_status:<25} | {error_msg:<15} |")
+        
+    print("="*78)
+    if all_successful:
+        print("Tổng kết: Mọi hoạt động đã hoàn tất thành công!".center(78))
+    else:
+        print("Tổng kết: Có lỗi xảy ra trong quá trình xử lý.".center(78))
+    print("="*78 + "\n")
+
 
 def cleanup(temp_dir):
     """Dọn dẹp thư mục tạm và các file rác sau khi quá trình hoàn tất."""
@@ -188,22 +241,32 @@ def main():
         print("Văn bản rỗng hoặc không thể chia nhỏ.")
         return
 
-    # Điều chỉnh số luồng nếu số chunk ít hơn
+    # Điều chỉnh số luồng nếu số chunk ít hơn và khởi tạo bảng báo cáo
     actual_num_threads = len(text_chunks)
-    
+    status_lock = threading.Lock()
+    status_report = [
+        {
+            "id": i,
+            "download_status": "Chưa xử lý",
+            "merge_status": "Chưa xử lý",
+            "error": None
+        }
+        for i in range(actual_num_threads)
+    ]
+
     print(f"Bắt đầu xử lý {actual_num_threads} chunk văn bản với {actual_num_threads} luồng...")
 
     # Bắt đầu luồng ghép file chạy nền
     merger_thread = threading.Thread(
         target=progressive_merger, 
-        args=(temp_dir, actual_num_threads, final_audio_path)
+        args=(temp_dir, actual_num_threads, final_audio_path, status_report, status_lock)
     )
     merger_thread.start()
 
     # Tạo và bắt đầu các luồng tải về
     threads = []
     for i in range(actual_num_threads):
-        thread = threading.Thread(target=text_to_audio_chunk, args=(text_chunks[i], i, language_, temp_dir))
+        thread = threading.Thread(target=text_to_audio_chunk, args=(text_chunks[i], i, language_, temp_dir, status_report, status_lock))
         threads.append(thread)
         thread.start()
 
@@ -216,6 +279,9 @@ def main():
     merger_thread.join()
     print("Tiến trình ghép file đã kết thúc.")
     
+    # In bảng tóm tắt
+    print_summary_table(status_report)
+
     # Kiểm tra xem file cuối cùng có tồn tại không trước khi mở
     if os.path.exists(final_audio_path):
         print("Đang mở file audio...")
