@@ -23,24 +23,40 @@ r"""
 
 
 
-Nó Có Hại Như Thế Nào?
-Sự trì hoãn không chỉ đơn giản là một thói quen xấu, nó có thể gây ra những tác động tiêu cực nghiêm trọng và lan rộng đến nhiều khía cạnh của cuộc sống:
-1. Ảnh hưởng đến hiệu suất và sự nghiệp:
-Chất lượng công việc kém: Làm việc vội vã vào phút chót hiếm khi tạo ra kết quả tốt nhất.
-Bỏ lỡ cơ hội: Bạn có thể bỏ lỡ các cơ hội thăng tiến hoặc học hỏi vì không hoàn thành nhiệm vụ đúng hạn.
-Tổn hại danh tiếng: Việc liên tục trễ deadline hoặc giao sản phẩm kém chất lượng sẽ khiến đồng nghiệp và cấp trên mất lòng tin vào bạn.
-2. Hủy hoại sức khỏe tinh thần:
-Tăng mức độ căng thẳng (stress) và lo âu (anxiety): Áp lực của deadline đang đến gần gây ra sự căng thẳng cực độ.
-Cảm giác tội lỗi và xấu hổ: Sau khi trì hoãn, bạn thường cảm thấy tội lỗi vì đã không làm việc, dẫn đến lòng tự trọng thấp.
-Tạo ra vòng lặp tiêu cực: Bạn cảm thấy tồi tệ -> bạn trì hoãn để né tránh cảm giác tồi tệ -> bạn lại càng cảm thấy tồi tệ hơn. Đây là một cái bẫy rất khó thoát ra.
-3. Gây hại cho sức khỏe thể chất:
-Sự căng thẳng mãn tính do trì hoãn có thể dẫn đến các vấn đề sức khỏe như mất ngủ, cao huyết áp, và hệ miễn dịch suy yếu.
-Mọi người cũng thường trì hoãn các hành động liên quan đến sức khỏe như đi khám bác sĩ, tập thể dục, hoặc ăn uống lành mạnh, dẫn đến hậu quả lâu dài.
-4. Vấn đề về tài chính và các mối quan hệ:
-Trì hoãn việc trả hóa đơn có thể dẫn đến phí phạt. Trì hoãn việc lên kế hoạch tài chính có thể khiến bạn mất đi các cơ hội đầu tư.
-Trong các mối quan hệ, việc trì hoãn những cuộc trò chuyện quan trọng hoặc không thực hiện lời hứa có thể gây ra xung đột và làm tổn thương người khác.
-Tóm lại, thói quen trì hoãn là một cơ chế đối phó ngắn hạn với cảm xúc tiêu cực nhưng lại gây ra những hậu quả vô cùng tai hại trong dài hạn.
 
+
+
+
+B. GIẢI THÍCH “KHẨU QUYẾT CHƠI” CỦA 20 NHÂN VẬT
+Elon Musk: “Tốc độ R&D là vũ khí tối thượng.”
+Ý nghĩa: Trong cuộc chơi công nghệ, ai học hỏi, thử nghiệm và cải tiến nhanh hơn sẽ là người chiến thắng, chứ không phải ai có nhiều tiền hơn hay quy mô lớn hơn lúc đầu. Cuộc chơi được định đoạt bởi gia tốc sáng tạo.
+Jeff Bezos: “Luôn là Ngày-1, nếu không bạn sẽ chết.”
+Ý nghĩa: Hãy luôn giữ tâm thế của một startup vào ngày đầu thành lập: khao khát, ám ảnh về khách hàng và sẵn sàng thử nghiệm. "Ngày-2" là trạng thái của sự tự mãn, trì trệ và suy vong. Cuộc chơi là phải duy trì được tinh thần "Ngày-1" mãi mãi.
+Steve Jobs: “Nghệ sĩ thực thụ thì phải ra mắt sản phẩm.”
+Ý nghĩa: Ý tưởng dù có hay đến đâu cũng vô giá trị nếu không được thực thi và đưa ra thế giới. "Chiến thắng" là tạo ra một sản phẩm có sức ảnh hưởng, chứ không phải giữ một ý tưởng hoàn hảo trên giấy.
+Kobe Bryant: “Tinh thần Mamba – hôm nay phải hơn hôm qua.”
+Ý nghĩa: Tập trung không ngừng nghỉ vào việc hoàn thiện bản thân. Đối thủ lớn nhất không phải đội khác, mà là chính bạn của ngày hôm qua. Cuộc chơi là một chuỗi nhiệm vụ hàng ngày để đạt đến sự tinh thông.
+Michael Jordan: “Tôi cạnh tranh với chính tiềm năng của mình.”
+Ý nghĩa: Tương tự Kobe, thước đo thành công cuối cùng là liệu bạn có phát huy hết 100% tiềm năng của mình hay không. Chức vô địch chỉ là kết quả của việc chiến thắng trong cuộc chơi nội tâm này.
+Serena Williams: “Tiến hóa hoặc biến mất.”
+Ý nghĩa: Trong một môi trường cạnh tranh khốc liệt, đứng yên đồng nghĩa với tụt lùi. Bạn phải liên tục thích nghi kỹ năng, chiến lược và tư duy để giữ vững đỉnh cao. Cuộc chơi là sự tiến hóa không ngừng.
+Warren Buffett: “Bảng điểm nội tại đánh bại tiếng vỗ tay bên ngoài.”
+Ý nghĩa: Nguyên tắc và sự phán đoán của riêng bạn quan trọng hơn ý kiến đám đông hay biến động thị trường. Chiến thắng là khi bạn trung thành với lý trí của mình, bất chấp sự tung hô hay chê bai từ bên ngoài.
+Charlie Munger: “Đọc 500 trang mỗi ngày – lãi kép cho não bộ.”
+Ý nghĩa: Tri thức có sức mạnh của lãi kép. Cuộc chơi là một quá trình tích lũy trí tuệ lâu dài, thứ sẽ cho bạn một lợi thế không thể bị sao chép.
+Naval Ravikant: “Kiếm tiền bằng đòn bẩy, chơi những ván lặp lại.”
+Ý nghĩa: Hãy xây dựng các hệ thống (code, media, vốn) có thể làm việc thay bạn. Tham gia vào các mối quan hệ và lĩnh vực mà ở đó uy tín và danh tiếng được bồi đắp qua thời gian, mang lại lợi íchทบซ้อน. Đừng chơi những ván ăn thua một lần rồi thôi.
+Ray Dalio: “Đau đớn + Suy ngẫm = Tiến bộ.”
+Ý nghĩa: Thất bại và sai lầm không phải là bước lùi, mà là dữ liệu quý giá. Hãy phân tích chúng một cách khách quan để rút ra bài học. Đây là vòng lặp cốt lõi để "lên level" trong cuộc chơi.
+Satya Nadella: “Luôn-học-hỏi quan trọng hơn là Biết-tuốt.”
+Ý nghĩa: Một văn hóa "luôn học hỏi" sẽ cởi mở với ý tưởng mới và không ngừng phát triển. Một văn hóa "biết tuốt" sẽ tự mãn và trì trệ. Cuộc chơi được thắng bởi tổ chức nào học nhanh nhất.
+Richard Branson: “Kệ nó, làm tới đi.”
+Ý nghĩa: Thể hiện tinh thần ưu tiên hành động, sẵn sàng chấp nhận rủi ro có tính toán cho những cuộc phiêu lưu mới. Đừng để việc phân tích quá mức làm bạn tê liệt.
+Phil Knight (Nike): “Không có vạch đích nào cả.”
+Ý nghĩa: Cuộc đua đến sự xuất sắc là vô tận. Khi bạn đạt được một mục tiêu, ngay lập tức hãy đặt ra một mục tiêu mới cao hơn. Đây là một cuộc chơi vô hạn về việc phá vỡ các giới hạn.
+Sam Altman: “Tham vọng phải lớn hơn nguồn lực.”
+Ý nghĩa: Những mục tiêu vĩ đại buộc bạn phải sáng tạo và xoay xở. Nếu tham vọng bị giới hạn bởi nguồn lực hiện tại, bạn sẽ không bao giờ đạt được kết quả đột phá (10x).
+Yvon Chouinard (Patagonia): “Trái Đất là cổ đông duy nhất của chúng tôi.”
 
 
 
