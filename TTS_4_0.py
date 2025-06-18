@@ -14,7 +14,7 @@ import sys
 
 # --- CẤU HÌNH ---
 # Luôn cố gắng tạo 10 luồng, trừ khi văn bản quá ngắn (<50 từ)
-NUM_THREADS = 35
+NUM_THREADS = 10
 DELAY_BETWEEN_REQUESTS = 2 # Giây. Tăng giá trị này nếu vẫn gặp lỗi 429.
 # -----------------
 
