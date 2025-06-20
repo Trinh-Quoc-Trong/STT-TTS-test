@@ -172,8 +172,8 @@ def print_summary_table(status_report):
     print("\n\n" + "="*78)
     print("BẢNG TÓM TẮT KẾT QUẢ".center(78))
     print("="*78)
-    print(f"| {'Chunk':<5} | {'Trạng thái Tải về':<25} | {'Trạng thái Ghép file':<25} | {'Ghi chú':<15} |")
-    print(f"|{'-'*7}|{'-'*27}|{'-'*27}|{'-'*17}|")
+    print(f"| {'Chunk':<5} | {'Trạng thái Tải về':<25} | {'Trạng thái Ghép file':<25} | {'Ghi chú':<10} |")
+    print(f"|{'-'*7}|{'-'*27}|{'-'*27}|{'-'*12}|")
     
     all_successful = True
     for report in status_report:
@@ -187,7 +187,7 @@ def print_summary_table(status_report):
         if merge_status not in ["Đã ghép", "Bỏ qua"]:
              all_successful = False
             
-        print(f"| {chunk_id:<5} | {download_status:<25} | {merge_status:<25} | {error_msg:<15} |")
+        print(f"| {chunk_id:<5} | {download_status:<25} | {merge_status:<25} | {error_msg:<10} |")
         
     print("="*78)
     if all_successful:
