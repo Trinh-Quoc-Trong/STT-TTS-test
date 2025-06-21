@@ -1,0 +1,28 @@
+    ten_du_an/
+    ├── .git/                     # Thư mục Git (ẩn)
+    ├── venv/                     # Môi trường ảo (virtual environment) (ẩn, có thể tên khác như .venv)
+    ├── src/ (hoặc ten_du_an/)    # Mã nguồn chính của ứng dụng
+    │   ├── __init__.py           # Biến thư mục thành một gói Python
+    │   ├── main.py               # Điểm vào chính của ứng dụng
+    │   ├── modules/              # Các module con hoặc gói chức năng
+    │   │   ├── __init__.py
+    │   │   ├── data_processing.py
+    │   │   ├── api.py
+    │   │   └── utils.py
+    │   └── config.py             # Cài đặt cấu hình
+    ├── tests/                    # Các bài kiểm thử (unit tests, integration tests)
+    │   ├── __init__.py
+    │   ├── test_main.py
+    │   ├── test_data_processing.py
+    │   └── fixtures.py           # Các dữ liệu hoặc hàm hỗ trợ cho test
+    ├── docs/                     # Tài liệu của dự án
+    │   ├── index.md
+    │   └── installation.md
+    ├── data/                     # Dữ liệu (ví dụ: dữ liệu mẫu, file cấu hình lớn)
+    ├── scripts/                  # Các script hỗ trợ (ví dụ: deploy, migrate database)
+    ├── .env                      # Biến môi trường (thường bị bỏ qua bởi .gitignore)
+    ├── .gitignore                # Danh sách các file/thư mục cần bỏ qua bởi Git
+    ├── requirements.txt          # Danh sách các thư viện/dependency của dự án
+    ├── README.md                 # Tổng quan về dự án, hướng dẫn cài đặt và sử dụng
+    ├── LICENSE                   # Giấy phép bản quyền
+    └── setup.py (hoặc pyproject.toml) # Cấu hình cho việc đóng gói và phân phối (nếu là thư viện/package)
