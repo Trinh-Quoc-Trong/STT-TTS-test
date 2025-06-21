@@ -3,7 +3,7 @@
 Điểm khởi chạy chính cho ứng dụng chuyển văn bản thành giọng nói.
 """
 import os
-from tts_processor import TtsProcessor
+from tts.processor import TtsProcessor
 
 # --- CẤU HÌNH ---
 INPUT_TEXT_FILE = "what_do_you_want_to_read.txt"
