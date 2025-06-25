@@ -20,15 +20,15 @@ DELAY_BETWEEN_REQUESTS = 2 # Giây. Tăng giá trị này nếu vẫn gặp lỗ
 
 language_ = "vi" # "vi" or "en" chọn ngôn ngữ
 try:
-    with open("what_do_you_want_to_read.txt", "r", encoding = "utf8") as file:
-        # Đọc văn bản từ file what_do_you_want_to_read.txt
+    with open("run_text.txt", "r", encoding = "utf8") as file:
+        # Đọc văn bản từ file run_text.txt
         text = file.read()
         if not text.strip():
-            print("Lỗi: File 'what_do_you_want_to_read.txt' không có nội dung. Dừng chương trình.")
+            print("Lỗi: File 'run_text.txt' không có nội dung. Dừng chương trình.")
             sys.exit()
         print(f"\nSẽ đọc văn bản: {text[0:100]}...\n")
 except FileNotFoundError:
-    print("Lỗi: Không tìm thấy file 'what_do_you_want_to_read.txt'.\nVui lòng tạo file này, đặt nội dung cần đọc vào và chạy lại script.")
+    print("Lỗi: Không tìm thấy file 'run_text.txt'.\nVui lòng tạo file này, đặt nội dung cần đọc vào và chạy lại script.")
     sys.exit()
 except Exception as e:
     print(f"Gặp lỗi khi đọc file: {e}")

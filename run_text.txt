@@ -1,10 +1,22 @@
-Ngọn lửa đam mê thắp sáng con đường, và chính ánh sáng ấy dẫn ta đến mọi kỳ tích.
-Từng trang sử huy hoàng đều được viết bằng mực của trái tim say mê.
-Khi niềm say mê trỗi dậy, không bức tường nào đủ cao để ngăn bước vĩ đại.
-Sự kiệt xuất nảy mầm từ mảnh đất đam mê, rồi vươn thành cây cổ thụ của thành công.
-Mọi thành tựu rực rỡ chỉ là ước mơ bình thường được nuôi dưỡng bằng lửa nhiệt huyết.
-Đam mê không chỉ mở cánh cửa vĩ đại, nó còn biến chính bạn thành chiếc chìa khóa.
-Vầng hào quang của vĩ nhân bắt đầu từ tia lửa nhỏ mang tên “tôi say mê điều này”.
-Ta chạm tới bầu trời không phải nhờ đôi cánh, mà nhờ cơn gió say mê nâng đỡ.
-Đam mê là bước khởi hành, nghị lực là hành trình, vĩ đại là đích đến.
-Khi trái tim hát khúc say mê, cả vũ trụ hòa âm thành bản nhạc của những điều phi thường.
+hào bạn, tôi sẽ giải thích nội dung của văn bản trên bằng tiếng Việt.
+Văn bản này mô tả một bộ dữ liệu (dataset) dùng cho việc nhận dạng biểu thức toán học viết tay.
+Tóm tắt nội dung chính:
+Bối cảnh (Context):
+Bộ dữ liệu này được tạo ra để giải quyết vấn đề: làm thế nào để có thể tự động nhận dạng một biểu thức toán học viết tay chỉ bằng cách chụp ảnh nó. Nó cung cấp tất cả dữ liệu cần thiết để bạn xây dựng một hệ thống như vậy.
+Mô tả bộ dữ liệu (Description):
+Quy mô: Chứa hơn 11.000 biểu thức được viết tay bởi hàng trăm người từ nhiều quốc gia khác nhau.
+Nguồn gốc: Dữ liệu được tổng hợp từ 4 cuộc thi quốc tế về nhận dạng biểu thức toán học viết tay trực tuyến (CROHME). Nó kết hợp dữ liệu từ nhiều nguồn có sẵn như MathBrush, HAMEX, MfrDB, v.v.
+Đa dạng: Các biểu thức được viết trên nhiều thiết bị khác nhau (bút kỹ thuật số, bảng trắng, máy tính bảng), do đó dữ liệu có nhiều tỷ lệ và độ phân giải khác nhau.
+Cập nhật: Bộ dữ liệu đã được mở rộng trong các cuộc thi CROHME 2013 và 2014 với các bộ dữ liệu thử nghiệm (test set) mới và các tác vụ mới như nhận dạng ký hiệu riêng lẻ và nhận dạng ma trận.
+Chi tiết Kỹ thuật (Technical Details):
+Định dạng: Dữ liệu được lưu trữ ở định dạng tệp InkML.
+Nội dung mỗi tệp InkML:
+Nét mực (ink): Tập hợp các nét vẽ tạo thành biểu thức.
+Sự thật ngầm hiểu (ground truth) ở cấp độ ký hiệu: Thông tin về cách phân đoạn (cắt) các nét vẽ thành từng ký hiệu (ví dụ: số '2', dấu '+') và nhãn của chúng.
+Sự thật ngầm hiểu ở cấp độ biểu thức: Cấu trúc logic của toàn bộ biểu thức, được biểu diễn bằng MathML (một ngôn ngữ đánh dấu để mô tả cấu trúc toán học).
+Thông tin bổ sung: Tệp còn chứa các siêu dữ liệu (metadata) như thông tin về người viết (ID, thuận tay nào, tuổi, giới tính), biểu diễn LaTeX của biểu thức, và một mã định danh duy nhất (UI).
+Liên kết: Định dạng InkML cho phép liên kết trực tiếp giữa các nét vẽ, các ký hiệu đã được phân đoạn, và cấu trúc MathML của chúng.
+Ghi nhận và Trích dẫn (Acknowledgements):
+Bộ dữ liệu được biên soạn bởi Harold Mouchère.
+Văn bản yêu cầu nếu bạn sử dụng bộ dữ liệu này trong nghiên cứu của mình, bạn cần trích dẫn công bố khoa học liên quan.
+Nói một cách đơn giản, đây là một bộ dữ liệu lớn và chi tiết, được chuẩn bị công phu để "dạy" cho máy tính cách đọc và hiểu các công thức toán mà con người viết tay.
