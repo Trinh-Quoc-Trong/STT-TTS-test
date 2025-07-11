@@ -1,3 +1,4 @@
 
 # Ignore specific files
 run_text.txt
+*.mp3
