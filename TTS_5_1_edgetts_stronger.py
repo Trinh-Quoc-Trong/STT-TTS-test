@@ -113,7 +113,28 @@ async def text_to_audio_chunk_async(text_chunk, index, voice, temp_dir, status_r
 
         print(f"Tác vụ {index}: Đang gửi yêu cầu tới API với giọng đọc '{voice}' (Rate: {rate}, Volume: {volume}, Pitch: {pitch}, Contour: '{contour}')...")
         
-        communicate = edge_tts.Communicate(text_chunk, voice, rate=rate, volume=volume, pitch=pitch, contour=contour)
+        final_text = text_chunk
+        communicate_kwargs = {
+            'rate': rate,
+            'volume': volume,
+            'pitch': pitch,
+        }
+
+        # Sửa lỗi: Tham số 'contour' không được hỗ trợ trực tiếp, cần dùng SSML.
+        if contour:
+            # Khi dùng contour, ta phải tự xây dựng thẻ prosody trong SSML
+            # và đưa các thuộc tính khác (rate, volume, pitch) vào đó.
+            final_text = (
+                f'<prosody rate="{rate}" volume="{volume}" pitch="{pitch}" contour="{contour}">'
+                f'{text_chunk}'
+                f'</prosody>'
+            )
+            # Đặt lại các tham số này về mặc định để thư viện không áp dụng chúng lần nữa
+            communicate_kwargs['rate'] = "+0%"
+            communicate_kwargs['volume'] = "+0%"
+            communicate_kwargs['pitch'] = "+0Hz"
+
+        communicate = edge_tts.Communicate(final_text, voice, **communicate_kwargs)
         await communicate.save(final_temp_path)
 
         print(f"Tác vụ {index}: Đã lưu chunk vào {final_temp_path}")
