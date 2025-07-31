@@ -24,7 +24,7 @@ VOICE_TO_USE = "vi-VN-NamMinhNeural"
 # --- TÙY CHỈNH GIỌNG NÓI ---
 # Rate: Tốc độ nói. Dạng chuỗi, ví dụ: "-10%". Mặc định là "+0%".
 # Giảm để nói chậm hơn, tăng để nói nhanh hơn.
-RATE = "+28%" 
+RATE = "+15%" 
 
 # Volume: Âm lượng. Dạng chuỗi, ví dụ: "+20%". Mặc định là "+0%".
 VOLUME = "+20%"
@@ -32,11 +32,6 @@ VOLUME = "+20%"
 # Pitch: Cao độ. Dạng chuỗi, ví dụ: "-15Hz". Mặc định là "+0Hz".
 # Giảm để giọng trầm hơn, tăng để giọng cao hơn.
 PITCH = "-18Hz"
-
-# Contour: Ngữ điệu của câu nói. Dạng chuỗi.
-# Ví dụ: "(0%,+20Hz) (10%,-10Hz) (40%,+5Hz)"
-# Để trống ("") nếu không sử dụng.
-CONTOUR = ""
 
 # --- SỬ DỤNG TÍNH NĂNG NÂNG CAO (SSML) ---
 # Đối với Emphasis, Style, và Role-play, bạn cần sử dụng cú pháp SSML
@@ -54,7 +49,7 @@ CONTOUR = ""
 # thư viện đã xử lý. Bạn chỉ cần chèn các thẻ điều khiển như trên.
 # Tính năng và các style có sẵn phụ thuộc vào từng giọng đọc.
 
-NUM_THREADS = 10  # Số lượng chunk văn bản sẽ được tạo
+NUM_THREADS = 20  # Số lượng chunk văn bản sẽ được tạo
 INPUT_TEXT_FILE = "run_text.txt"
 OUTPUT_AUDIO_FILE = "doc_len_003_merged_edge_stronger.mp3" # File output mới
 
@@ -97,7 +92,7 @@ def split_text_by_word_count(text_to_split: str, num_chunks: int, min_word_thres
 
     return [c for c in chunks if c]
 
-async def text_to_audio_chunk_async(text_chunk, index, voice, temp_dir, status_report, status_lock, rate, volume, pitch, contour):
+async def text_to_audio_chunk_async(text_chunk, index, voice, temp_dir, status_report, status_lock, rate, volume, pitch):
     """
     [ASYNC] Chuyển một đoạn văn bản thành file audio bằng edge-tts.
     Đây là một coroutine, chạy đồng thời với các coroutine khác trong event loop của asyncio.
@@ -111,30 +106,9 @@ async def text_to_audio_chunk_async(text_chunk, index, voice, temp_dir, status_r
 
         final_temp_path = os.path.join(temp_dir, f"temp_{index}.mp3")
 
-        print(f"Tác vụ {index}: Đang gửi yêu cầu tới API với giọng đọc '{voice}' (Rate: {rate}, Volume: {volume}, Pitch: {pitch}, Contour: '{contour}')...")
+        print(f"Tác vụ {index}: Đang gửi yêu cầu tới API với giọng đọc '{voice}' (Rate: {rate}, Volume: {volume}, Pitch: {pitch})...")
         
-        final_text = text_chunk
-        communicate_kwargs = {
-            'rate': rate,
-            'volume': volume,
-            'pitch': pitch,
-        }
-
-        # Sửa lỗi: Tham số 'contour' không được hỗ trợ trực tiếp, cần dùng SSML.
-        if contour:
-            # Khi dùng contour, ta phải tự xây dựng thẻ prosody trong SSML
-            # và đưa các thuộc tính khác (rate, volume, pitch) vào đó.
-            final_text = (
-                f'<prosody rate="{rate}" volume="{volume}" pitch="{pitch}" contour="{contour}">'
-                f'{text_chunk}'
-                f'</prosody>'
-            )
-            # Đặt lại các tham số này về mặc định để thư viện không áp dụng chúng lần nữa
-            communicate_kwargs['rate'] = "+0%"
-            communicate_kwargs['volume'] = "+0%"
-            communicate_kwargs['pitch'] = "+0Hz"
-
-        communicate = edge_tts.Communicate(final_text, voice, **communicate_kwargs)
+        communicate = edge_tts.Communicate(text_chunk, voice, rate=rate, volume=volume, pitch=pitch)
         await communicate.save(final_temp_path)
 
         print(f"Tác vụ {index}: Đã lưu chunk vào {final_temp_path}")
@@ -223,7 +197,7 @@ async def amain():
 
     print(f"Bắt đầu xử lý {num_chunks} chunk văn bản...")
     print(f"Giọng đọc sẽ được sử dụng: {VOICE_TO_USE}")
-    print(f"Tùy chỉnh - Tốc độ: {RATE}, Âm lượng: {VOLUME}, Cao độ: {PITCH}, Ngữ điệu: '{CONTOUR}'")
+    print(f"Tùy chỉnh - Tốc độ: {RATE}, Âm lượng: {VOLUME}, Cao độ: {PITCH}")
 
 
     # --- GIAI ĐOẠN 1: TẢI XUỐNG ĐỒNG LOẠT ---
@@ -232,7 +206,7 @@ async def amain():
     for i in range(num_chunks):
         task = text_to_audio_chunk_async(
             text_chunks[i], i, VOICE_TO_USE, temp_dir, status_report, status_lock, 
-            rate=RATE, volume=VOLUME, pitch=PITCH, contour=CONTOUR
+            rate=RATE, volume=VOLUME, pitch=PITCH
         )
         tasks.append(task)
     
