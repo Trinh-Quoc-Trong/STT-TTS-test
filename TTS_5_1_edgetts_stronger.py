@@ -9,6 +9,7 @@ import threading
 from pydub import AudioSegment
 import time
 import sys
+from tqdm import tqdm
 
 # --- YÊU CẦU CÀI ĐẶT ---
 # pip install edge-tts pydub
@@ -24,7 +25,7 @@ VOICE_TO_USE = "vi-VN-NamMinhNeural"
 # --- TÙY CHỈNH GIỌNG NÓI ---
 # Rate: Tốc độ nói. Dạng chuỗi, ví dụ: "-10%". Mặc định là "+0%".
 # Giảm để nói chậm hơn, tăng để nói nhanh hơn.
-RATE = "+15%" 
+RATE = "+25%" 
 
 # Volume: Âm lượng. Dạng chuỗi, ví dụ: "+20%". Mặc định là "+0%".
 VOLUME = "+20%"
@@ -83,7 +84,7 @@ def split_text_by_word_count(text_to_split: str, num_chunks: int, min_word_thres
 
     chunks = []
     start_idx = 0
-    for i in range(num_chunks):
+    for i in tqdm(range(num_chunks), desc="Chia văn bản thành các chunk"):
         add_one = 1 if i < remainder else 0
         end_idx = start_idx + base_size + add_one
         chunk_words = words[start_idx:end_idx]
@@ -106,17 +107,20 @@ async def text_to_audio_chunk_async(text_chunk, index, voice, temp_dir, status_r
 
         final_temp_path = os.path.join(temp_dir, f"temp_{index}.mp3")
 
-        print(f"Tác vụ {index}: Đang gửi yêu cầu tới API với giọng đọc '{voice}' (Rate: {rate}, Volume: {volume}, Pitch: {pitch})...")
+        # Tắt log để giao diện gọn hơn, thanh tiến trình đã thể hiện trạng thái
+        # print(f"Tác vụ {index}: Đang gửi yêu cầu tới API với giọng đọc '{voice}' (Rate: {rate}, Volume: {volume}, Pitch: {pitch})...")
         
         communicate = edge_tts.Communicate(text_chunk, voice, rate=rate, volume=volume, pitch=pitch)
         await communicate.save(final_temp_path)
 
-        print(f"Tác vụ {index}: Đã lưu chunk vào {final_temp_path}")
+        # Tắt log thành công, vì thanh tiến trình đã cập nhật rồi
+        # print(f"Tác vụ {index}: Đã lưu chunk vào {final_temp_path}")
         with status_lock:
             status_report[index]["download_status"] = "Thành công"
     except Exception as e:
-        error_message = f"Lỗi trong tác vụ {index}: {e}"
-        print(error_message)
+        # Sử dụng tqdm.write để log lỗi mà không làm hỏng thanh tiến trình
+        error_message = f"Lỗi trong tác vụ {index + 1}: {e}"
+        tqdm.write(error_message)
         with status_lock:
             status_report[index]["download_status"] = "Thất bại"
             status_report[index]["error"] = error_message
@@ -203,6 +207,7 @@ async def amain():
     # --- GIAI ĐOẠN 1: TẢI XUỐNG ĐỒNG LOẠT ---
     print("\n--- Bắt đầu giai đoạn tải xuống ---")
     tasks = []
+    # Bỏ tqdm ở vòng lặp tạo task để tránh hiển thị thừa
     for i in range(num_chunks):
         task = text_to_audio_chunk_async(
             text_chunks[i], i, VOICE_TO_USE, temp_dir, status_report, status_lock, 
@@ -210,13 +215,17 @@ async def amain():
         )
         tasks.append(task)
     
-    await asyncio.gather(*tasks)
+    # Sử dụng `asyncio.as_completed` với `tqdm` để có thanh tiến trình thực
+    # khi các tác vụ thực sự hoàn thành.
+    for f in tqdm(asyncio.as_completed(tasks), total=len(tasks), desc="Tải xuống các chunk", unit="chunk"):
+        await f
+
     print("--- Tất cả các tác vụ tải về đã hoàn thành ---\n")
 
     # --- GIAI ĐOẠN 2: GHÉP FILE TUẦN TỰ ---
     print("--- Bắt đầu giai đoạn ghép file ---")
     combined_audio = AudioSegment.empty()
-    for i in range(num_chunks):
+    for i in tqdm(range(num_chunks), desc="Ghép các chunk", unit="chunk"):
         chunk_file_path = os.path.join(temp_dir, f"temp_{i}.mp3")
         
         with status_lock:
@@ -229,21 +238,22 @@ async def amain():
                 combined_audio += segment
                 with status_lock:
                     status_report[i]["merge_status"] = "Đã ghép"
-                print(f"-> Đã ghép chunk {i + 1}/{num_chunks}.")
+                # Tắt log ghép file thành công để gọn terminal
+                # print(f"-> Đã ghép chunk {i + 1}/{num_chunks}.")
             except Exception as e:
                 error_message = f"Lỗi khi xử lý file {chunk_file_path}: {e}"
-                print(error_message)
+                tqdm.write(error_message)
                 with status_lock:
                     status_report[i]['merge_status'] = 'Lỗi ghép file'
                     status_report[i]['error'] = error_message
         elif is_failed:
              with status_lock:
                 status_report[i]['merge_status'] = 'Bỏ qua (lỗi tải)'
-             print(f"-> Bỏ qua chunk {i + 1}/{num_chunks} do lỗi tải về.")
+             tqdm.write(f"-> Bỏ qua chunk {i + 1}/{num_chunks} do lỗi tải về.")
         else:
              with status_lock:
                 status_report[i]['merge_status'] = 'Bỏ qua (không tìm thấy)'
-             print(f"-> Cảnh báo: Bỏ qua chunk {i + 1}/{num_chunks} do không tìm thấy file, dù không báo lỗi tải.")
+             tqdm.write(f"-> Cảnh báo: Bỏ qua chunk {i + 1}/{num_chunks} do không tìm thấy file, dù không báo lỗi tải.")
 
     # --- GIAI ĐOẠN 3: XUẤT FILE VÀ DỌN DẸP ---
     if len(combined_audio) > 0:
