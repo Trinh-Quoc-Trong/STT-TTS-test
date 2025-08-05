@@ -50,7 +50,7 @@ PITCH = "-18Hz"
 # thư viện đã xử lý. Bạn chỉ cần chèn các thẻ điều khiển như trên.
 # Tính năng và các style có sẵn phụ thuộc vào từng giọng đọc.
 
-NUM_THREADS = 20  # Số lượng chunk văn bản sẽ được tạo
+NUM_THREADS = 10    # Số lượng chunk văn bản sẽ được tạo
 INPUT_TEXT_FILE = "run_text.txt"
 OUTPUT_AUDIO_FILE = "doc_len_003_merged_edge_stronger.mp3" # File output mới
 
