@@ -34,17 +34,7 @@ VOLUME = "+20%"
 # Giảm để giọng trầm hơn, tăng để giọng cao hơn.
 PITCH = "-20Hz"
 
-# --- SỬ DỤNG TÍNH NĂNG NÂNG CAO (SSML) ---
-# Đối với Emphasis, Style, và Role-play, bạn cần sử dụng cú pháp SSML
-# trực tiếp trong file `run_text.txt`. Script sẽ tự động xử lý.
-#
-# Ví dụ nội dung file `run_text.txt`:
-#
-#   Câu nói bình thường.
-#   <mstts:express-as style="cheerful">
-#       Câu này sẽ được đọc với giọng vui vẻ.
-#   </mstts:express-as>
-#   Câu này <emphasis level="strong">có từ được nhấn mạnh</emphasis>.
+
 #
 # Lưu ý: Các thẻ SSML phức tạp như <speak>, <voice> không cần thiết vì
 # thư viện đã xử lý. Bạn chỉ cần chèn các thẻ điều khiển như trên.
