@@ -32,7 +32,7 @@ VOLUME = "+20%"
 
 # Pitch: Cao độ. Dạng chuỗi, ví dụ: "-15Hz". Mặc định là "+0Hz".
 # Giảm để giọng trầm hơn, tăng để giọng cao hơn.
-PITCH = "-18Hz"
+PITCH = "-20Hz"
 
 # --- SỬ DỤNG TÍNH NĂNG NÂNG CAO (SSML) ---
 # Đối với Emphasis, Style, và Role-play, bạn cần sử dụng cú pháp SSML
@@ -50,7 +50,7 @@ PITCH = "-18Hz"
 # thư viện đã xử lý. Bạn chỉ cần chèn các thẻ điều khiển như trên.
 # Tính năng và các style có sẵn phụ thuộc vào từng giọng đọc.
 
-NUM_THREADS = 10    # Số lượng chunk văn bản sẽ được tạo
+NUM_THREADS = 20    # Số lượng chunk văn bản sẽ được tạo
 INPUT_TEXT_FILE = "run_text.txt"
 OUTPUT_AUDIO_FILE = "doc_len_003_merged_edge_stronger.mp3" # File output mới
 
