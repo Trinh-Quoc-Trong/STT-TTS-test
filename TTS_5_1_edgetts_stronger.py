@@ -1,14 +1,31 @@
 # -*- coding: utf-8 -*-
-# PHIÊN BẢN 5.2 - TÍCH HỢP CONTOUR VÀ HƯỚNG DẪN SSML
-# Dựa trên phiên bản 5.1, thêm tùy chỉnh Contour và giải thích cách dùng SSML.
+# PHIÊN BẢN 5.3 - RETRY + SEMAPHORE CHỐNG THROTTLE
+# Microsoft throttle API edge-tts khá mạnh (đặc biệt IP Việt Nam).
+# Thêm retry exponential backoff + semaphore giới hạn concurrency để ổn định.
 
 import os
 import asyncio
-import edge_tts
 import threading
+import sys
+import random
+
+# --- FIX WINDOWS CONSOLE ENCODING ---
+# Một số môi trường PowerShell/terminal trên Windows có stdout encoding = cp1252,
+# khiến `print()` tiếng Việt bị UnicodeEncodeError. Ép về UTF-8 để script không crash.
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+    except Exception:
+        # Nếu không hỗ trợ (hiếm), cứ bỏ qua để không làm hỏng luồng chạy.
+        pass
+try:
+    import edge_tts
+except ModuleNotFoundError as exc:
+    print("Lỗi: Chưa cài edge-tts. Chạy: python -m pip install edge-tts")
+    raise SystemExit(1) from exc
 from pydub import AudioSegment
 import time
-import sys
 from tqdm import tqdm
 
 # --- YÊU CẦU CÀI ĐẶT ---
@@ -21,18 +38,21 @@ from tqdm import tqdm
 # --- CẤU HÌNH ---
 # Giọng Nam: vi-VN-NamMinhNeural
 VOICE_TO_USE = "vi-VN-NamMinhNeural"
+# VOICE_TO_USE = "en-US-AriaNeural"
+# VOICE_TO_USE = "en-US-GuyNeural" # giọng nam tiếng anh
+
 
 # --- TÙY CHỈNH GIỌNG NÓI ---
 # Rate: Tốc độ nói. Dạng chuỗi, ví dụ: "-10%". Mặc định là "+0%".
 # Giảm để nói chậm hơn, tăng để nói nhanh hơn.
-RATE = "+25%" 
+RATE = "+15%" 
 
 # Volume: Âm lượng. Dạng chuỗi, ví dụ: "+20%". Mặc định là "+0%".
 VOLUME = "+20%"
 
 # Pitch: Cao độ. Dạng chuỗi, ví dụ: "-15Hz". Mặc định là "+0Hz".
 # Giảm để giọng trầm hơn, tăng để giọng cao hơn.
-PITCH = "-20Hz"
+PITCH = "-21Hz"
 
 
 #
@@ -42,7 +62,12 @@ PITCH = "-20Hz"
 
 NUM_THREADS = 20    # Số lượng chunk văn bản sẽ được tạo
 INPUT_TEXT_FILE = "run_text.txt"
-OUTPUT_AUDIO_FILE = "doc_len_003_merged_edge_stronger.mp3" # File output mới
+OUTPUT_AUDIO_FILE = "doc_len_003_merged_edge_stronger.mp3" # File output
+
+# --- RETRY & THROTTLE ---
+MAX_RETRIES = 8             # Số lần thử lại tối đa cho mỗi chunk
+RETRY_BASE_DELAY = 2.0      # Delay cơ sở (giây), sẽ tăng theo exponential backoff
+MAX_CONCURRENT = 3           # Số request đồng thời tối đa (tránh bị throttle)
 
 # -----------------
 
@@ -59,7 +84,7 @@ except FileNotFoundError:
 except Exception as e:
     print(f"Gặp lỗi khi đọc file: {e}")
     sys.exit()
-
+ 
 
 def split_text_by_word_count(text_to_split: str, num_chunks: int, min_word_threshold: int = 50):
     """Chia văn bản thành *num_chunks* phần dựa trên số lượng từ."""
@@ -83,33 +108,40 @@ def split_text_by_word_count(text_to_split: str, num_chunks: int, min_word_thres
 
     return [c for c in chunks if c]
 
-async def text_to_audio_chunk_async(text_chunk, index, voice, temp_dir, status_report, status_lock, rate, volume, pitch):
+async def text_to_audio_chunk_async(text_chunk, index, voice, temp_dir, status_report, status_lock, rate, volume, pitch, semaphore):
     """
     [ASYNC] Chuyển một đoạn văn bản thành file audio bằng edge-tts.
-    Đây là một coroutine, chạy đồng thời với các coroutine khác trong event loop của asyncio.
+    Có retry với exponential backoff + jitter để chống throttle từ Microsoft.
+    Semaphore giới hạn số request đồng thời.
     """
-    try:
+    async with semaphore:
+        if not text_chunk:
+            with status_lock:
+                status_report[index]["download_status"] = "Thất bại"
+                status_report[index]["error"] = "Chunk văn bản rỗng."
+            return
+
         with status_lock:
             status_report[index]["download_status"] = "Đang xử lý"
 
-        if not text_chunk:
-            raise ValueError("Chunk văn bản rỗng.")
-
         final_temp_path = os.path.join(temp_dir, f"temp_{index}.mp3")
+        last_error = None
 
-        # Tắt log để giao diện gọn hơn, thanh tiến trình đã thể hiện trạng thái
-        # print(f"Tác vụ {index}: Đang gửi yêu cầu tới API với giọng đọc '{voice}' (Rate: {rate}, Volume: {volume}, Pitch: {pitch})...")
-        
-        communicate = edge_tts.Communicate(text_chunk, voice, rate=rate, volume=volume, pitch=pitch)
-        await communicate.save(final_temp_path)
+        for attempt in range(1, MAX_RETRIES + 1):
+            try:
+                communicate = edge_tts.Communicate(text_chunk, voice, rate=rate, volume=volume, pitch=pitch)
+                await communicate.save(final_temp_path)
+                with status_lock:
+                    status_report[index]["download_status"] = "Thành công"
+                return
+            except Exception as e:
+                last_error = e
+                if attempt < MAX_RETRIES:
+                    delay = RETRY_BASE_DELAY * (2 ** (attempt - 1)) + random.uniform(0, 1)
+                    tqdm.write(f"  Chunk {index+1}: lần {attempt}/{MAX_RETRIES} thất bại, thử lại sau {delay:.1f}s...")
+                    await asyncio.sleep(delay)
 
-        # Tắt log thành công, vì thanh tiến trình đã cập nhật rồi
-        # print(f"Tác vụ {index}: Đã lưu chunk vào {final_temp_path}")
-        with status_lock:
-            status_report[index]["download_status"] = "Thành công"
-    except Exception as e:
-        # Sử dụng tqdm.write để log lỗi mà không làm hỏng thanh tiến trình
-        error_message = f"Lỗi trong tác vụ {index + 1}: {e}"
+        error_message = f"Lỗi chunk {index+1} sau {MAX_RETRIES} lần thử: {last_error}"
         tqdm.write(error_message)
         with status_lock:
             status_report[index]["download_status"] = "Thất bại"
@@ -194,23 +226,32 @@ async def amain():
     print(f"Tùy chỉnh - Tốc độ: {RATE}, Âm lượng: {VOLUME}, Cao độ: {PITCH}")
 
 
-    # --- GIAI ĐOẠN 1: TẢI XUỐNG ĐỒNG LOẠT ---
-    print("\n--- Bắt đầu giai đoạn tải xuống ---")
+    # --- GIAI ĐOẠN 1: TẢI XUỐNG (GIỚI HẠN CONCURRENCY + RETRY) ---
+    print(f"\n--- Bắt đầu tải xuống (tối đa {MAX_CONCURRENT} đồng thời, retry tối đa {MAX_RETRIES} lần) ---")
+    semaphore = asyncio.Semaphore(MAX_CONCURRENT)
+    
     tasks = []
-    # Bỏ tqdm ở vòng lặp tạo task để tránh hiển thị thừa
     for i in range(num_chunks):
         task = text_to_audio_chunk_async(
             text_chunks[i], i, VOICE_TO_USE, temp_dir, status_report, status_lock, 
-            rate=RATE, volume=VOLUME, pitch=PITCH
+            rate=RATE, volume=VOLUME, pitch=PITCH, semaphore=semaphore
         )
         tasks.append(task)
     
-    # Sử dụng `asyncio.as_completed` với `tqdm` để có thanh tiến trình thực
-    # khi các tác vụ thực sự hoàn thành.
-    for f in tqdm(asyncio.as_completed(tasks), total=len(tasks), desc="Tải xuống các chunk", unit="chunk"):
-        await f
+    done_count = 0
+    pbar = tqdm(total=len(tasks), desc="Tải xuống các chunk", unit="chunk")
+    
+    async def wrap(coro):
+        nonlocal done_count
+        await coro
+        done_count += 1
+        pbar.update(1)
+    
+    await asyncio.gather(*(wrap(t) for t in tasks))
+    pbar.close()
 
-    print("--- Tất cả các tác vụ tải về đã hoàn thành ---\n")
+    success_count = sum(1 for r in status_report if r["download_status"] == "Thành công")
+    print(f"--- Hoàn tất: {success_count}/{num_chunks} chunk thành công ---\n")
 
     # --- GIAI ĐOẠN 2: GHÉP FILE TUẦN TỰ ---
     print("--- Bắt đầu giai đoạn ghép file ---")

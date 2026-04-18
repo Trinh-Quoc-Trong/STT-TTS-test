@@ -42,7 +42,7 @@ def extract_audio(input_path: str, output_audio_path: str) -> str:
         print(f"Lỗi: Định dạng file '{file_extension}' không được hỗ trợ. Vui lòng cung cấp file video hoặc audio.")
         sys.exit(1)
 
-def transcribe_audio(audio_path: str, model_name: str = "base") -> str:
+def transcribe_audio(audio_path: str, model_name: str = "medium") -> str:
     """
     Chuyển đổi file âm thanh thành văn bản sử dụng mô hình Whisper.
     Các model có sẵn: 'tiny', 'base', 'small', 'medium', 'large'.
@@ -72,7 +72,7 @@ def transcribe_audio(audio_path: str, model_name: str = "base") -> str:
 
 def main():
     # Ví dụ sử dụng: Thay đổi đường dẫn tới file video/audio của bạn
-    INPUT_FILE = r"audio\tests\iLoveYt.net_YouTube_Cu-danh-Cuoc-Doi_Media_3uctnEEyiMQ_002_360p.mp4" # <--- ĐIỀN ĐƯỜNG DẪN FILE CỦA BẠN VÀO ĐÂY
+    INPUT_FILE = r"audio\HALLOWEEN.wav" # <--- ĐIỀN ĐƯỜNG DẪN FILE CỦA BẠN VÀO ĐÂY
     
     # if len(sys.argv) < 2:
     #     print("Cách sử dụng: python video_to_subtitle.py <đường_dẫn_tới_file_video_hoặc_audio>")
