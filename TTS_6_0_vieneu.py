@@ -36,8 +36,9 @@ OUTPUT_AUDIO_FILE = "doc_len_vieneu.mp3"
 VOICE_PRESET_INDEX = 0  # Đặt số (0, 1, 2...) để chọn giọng khác
 
 # Số chunk chia văn bản (VieNeu xử lý local nên không cần quá nhiều)
-NUM_CHUNKS = 10
+NUM_CHUNKS = 24
 
+MAX_WORKER = 12
 # VieNeu mode: "standard" (PyTorch GPU), "fast" (LMDeploy GPU), None = Turbo (GGUF CPU)
 VIENEU_MODE = "fast"  # Sử dụng LMDeploy GPU - Tốc độ rất cao
 
@@ -205,22 +206,34 @@ def main():
 
     start_total_synth = time.time()
 
-    # Sử dụng ThreadPoolExecutor để chạy song song 4 luồng
-    # Bạn có thể tăng max_workers lên 6 hoặc 8 nếu VRAM vẫn còn dư nhiều
-    max_workers = 4 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {executor.submit(synthesize_chunk, i, text_chunks[i]): i for i in range(num_actual)}
-        
-        for future in tqdm(concurrent.futures.as_completed(futures), total=num_actual, desc="Tổng hợp", unit="chunk"):
-            i, result, c_time = future.result()
-            total_gpu_time += c_time
-            if isinstance(result, Exception):
-                tqdm.write(f"  Lỗi chunk {i+1}: {result}")
-            elif result is not None and len(result) > 0:
-                all_audio_segments[i] = result
-            else:
-                if text_chunks[i].strip():
-                    tqdm.write(f"  Chunk {i+1}: Không nhận được audio (kết quả rỗng)")
+    # --- ẨN CÁC LỖI [TM][ERROR] TỪ C++ CỦA LMDEPLOY ---
+    import sys
+    fd = sys.stderr.fileno()
+    devnull = os.open(os.devnull, os.O_WRONLY)
+    save_fd = os.dup(fd)
+    os.dup2(devnull, fd)
+
+    try:
+        # Sử dụng ThreadPoolExecutor để chạy song song 4 luồng
+        max_workers = MAX_WORKER 
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {executor.submit(synthesize_chunk, i, text_chunks[i]): i for i in range(num_actual)}
+            
+            for future in tqdm(concurrent.futures.as_completed(futures), total=num_actual, desc="Tổng hợp", unit="chunk", file=sys.stdout):
+                i, result, c_time = future.result()
+                total_gpu_time += c_time
+                if isinstance(result, Exception):
+                    tqdm.write(f"  Lỗi chunk {i+1}: {result}")
+                elif result is not None and len(result) > 0:
+                    all_audio_segments[i] = result
+                else:
+                    if text_chunks[i].strip():
+                        tqdm.write(f"  Chunk {i+1}: Không nhận được audio (kết quả rỗng)")
+    finally:
+        # --- KHÔI PHỤC LẠI STDERR ---
+        os.dup2(save_fd, fd)
+        os.close(devnull)
+        os.close(save_fd)
 
     total_synth_time = time.time() - start_total_synth
     
