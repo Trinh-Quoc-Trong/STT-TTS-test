@@ -1,6 +1,0 @@
-{"id": "log_1769749641.5676885", "timestamp": 1769749641567, "location": "local_stream_translator.py", "message": "Starting model loading", "data": {}, "sessionId": "debug-session-001", "runId": "run1", "hypothesisId": "INIT"}
-{"id": "log_1769749641.5785613", "timestamp": 1769749641578, "location": "local_stream_translator.py", "message": "Loading Whisper", "data": {}, "sessionId": "debug-session-001", "runId": "run1", "hypothesisId": "INIT"}
-{"id": "log_1769749643.02637", "timestamp": 1769749643026, "location": "local_stream_translator.py", "message": "Loading Translator", "data": {}, "sessionId": "debug-session-001", "runId": "run1", "hypothesisId": "INIT"}
-{"id": "log_1769749646.7325284", "timestamp": 1769749646732, "location": "local_stream_translator.py", "message": "Loading TTS", "data": {}, "sessionId": "debug-session-001", "runId": "run1", "hypothesisId": "INIT"}
-{"id": "log_1769749648.137152", "timestamp": 1769749648137, "location": "local_stream_translator.py", "message": "Worker thread started", "data": {}, "sessionId": "debug-session-001", "runId": "run1", "hypothesisId": "C"}
-{"id": "log_1769749648.137152", "timestamp": 1769749648137, "location": "local_stream_translator.py", "message": "Microphone initialized", "data": {}, "sessionId": "debug-session-001", "runId": "run1", "hypothesisId": "A"}

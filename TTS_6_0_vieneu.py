@@ -7,6 +7,7 @@ import os
 import sys
 import time
 import numpy as np
+import concurrent.futures
 
 if sys.platform == "win32":
     try:
@@ -38,7 +39,7 @@ VOICE_PRESET_INDEX = 0  # Đặt số (0, 1, 2...) để chọn giọng khác
 NUM_CHUNKS = 10
 
 # VieNeu mode: "standard" (PyTorch GPU), "fast" (LMDeploy GPU), None = Turbo (GGUF CPU)
-VIENEU_MODE = "standard"  # GPU mode - chất lượng cao nhất
+VIENEU_MODE = "fast"  # Sử dụng LMDeploy GPU - Tốc độ rất cao
 
 SAMPLE_RATE = 24000  # VieNeu output 24kHz
 
@@ -68,37 +69,28 @@ except Exception as e:
 
 
 def clean_text_for_tts(raw_text: str) -> str:
-    """Loại bỏ markdown, ký tự đặc biệt, chuẩn hóa text cho TTS tiếng Việt."""
-    t = raw_text
-
-    # --- Xóa markdown ---
-    t = re.sub(r'^---+\s*$', '', t, flags=re.MULTILINE)
-    t = re.sub(r'^===+\s*$', '', t, flags=re.MULTILINE)
+    t = raw_text.lower()
+    t = re.sub(r'^=+\s*$', '', t, flags=re.MULTILINE)
+    t = re.sub(r'^-+\s*$', '', t, flags=re.MULTILINE)
     t = re.sub(r'^#{1,6}\s+', '', t, flags=re.MULTILINE)
     t = re.sub(r'\*\*(.+?)\*\*', r'\1', t, flags=re.DOTALL)
     t = re.sub(r'\*(.+?)\*', r'\1', t, flags=re.DOTALL)
     t = re.sub(r'__(.+?)__', r'\1', t, flags=re.DOTALL)
     t = re.sub(r'~~(.+?)~~', r'\1', t, flags=re.DOTALL)
     t = re.sub(r'`{1,3}(.+?)`{1,3}', r'\1', t, flags=re.DOTALL)
-    t = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', t)
     t = re.sub(r'!\[.*?\]\(.*?\)', '', t)
-
-    # --- Xóa URL / HTML ---
+    t = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', t)
     t = re.sub(r'https?://\S+', '', t)
     t = re.sub(r'<[^>]+>', '', t)
-
-    # --- Xóa sạch ký tự nhiễu ---
-    t = re.sub(r'[—–•→←✅❌⭐🔊🚀💾📋👤🎧🦜…""\u201c\u201d\u2018\u2019`~|>]', '', t)
+    t = re.sub(r'[\u2500-\u257F\u2580-\u259F]', '', t)
+    t = re.sub(r'[—–•→←↓✅❌✓✗⭐🔊🚀💾📋👤🎧🦜…""\u201c\u201d\u2018\u2019`~|><=+#]', '', t)    
+    t = re.sub(r'-', ' ', t)
     t = re.sub(r'^>\s*', '', t, flags=re.MULTILINE)
     t = re.sub(r'^[\-\*\+]\s+', '', t, flags=re.MULTILINE)
-    t = re.sub(r'[{}\[\]()@#&]', '', t)
-
-    # --- Khoảng trắng ---
+    t = re.sub(r'[{}\[\]()@&]', '', t)
     t = re.sub(r'[ \t]+', ' ', t)
-    t = re.sub(r'\n{2,}', '\n', t)
-
     lines = [line.strip() for line in t.split('\n') if line.strip()]
-    return ' '.join(lines)
+    return '\n'.join(lines)
 
 
 def split_text_by_sentence(text_to_split: str, num_chunks: int, min_word_threshold: int = 30):
@@ -193,34 +185,49 @@ def main():
     print()
 
     # --- GIAI ĐOẠN 2: SYNTHESIS TỪNG CHUNK ---
-    print("--- Bắt đầu tổng hợp giọng nói ---")
-    all_audio_segments = []
-    total_synth_time = 0
+    print("--- Bắt đầu tổng hợp giọng nói (Chạy đa luồng) ---")
+    all_audio_segments = [None] * num_actual
+    total_gpu_time = 0
 
-    for i in tqdm(range(num_actual), desc="Tổng hợp", unit="chunk"):
-        chunk = text_chunks[i]
+    def synthesize_chunk(i, chunk):
         if not chunk.strip():
-            continue
-
+            return i, None, 0
         try:
             start_chunk = time.time()
-
             kwargs = {"text": chunk}
             if voice_data is not None:
                 kwargs["voice"] = voice_data
-
             audio_array = tts.infer(**kwargs)
             chunk_time = time.time() - start_chunk
-            total_synth_time += chunk_time
-
-            if audio_array is not None and len(audio_array) > 0:
-                all_audio_segments.append(audio_array)
-            else:
-                tqdm.write(f"  Chunk {i+1}: Không nhận được audio (kết quả rỗng)")
+            return i, audio_array, chunk_time
         except Exception as e:
-            tqdm.write(f"  Lỗi chunk {i+1}: {e}")
+            return i, e, 0
 
-    print(f"\n--- Tổng hợp xong {len(all_audio_segments)}/{num_actual} chunk trong {total_synth_time:.1f}s ---\n")
+    start_total_synth = time.time()
+
+    # Sử dụng ThreadPoolExecutor để chạy song song 4 luồng
+    # Bạn có thể tăng max_workers lên 6 hoặc 8 nếu VRAM vẫn còn dư nhiều
+    max_workers = 4 
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(synthesize_chunk, i, text_chunks[i]): i for i in range(num_actual)}
+        
+        for future in tqdm(concurrent.futures.as_completed(futures), total=num_actual, desc="Tổng hợp", unit="chunk"):
+            i, result, c_time = future.result()
+            total_gpu_time += c_time
+            if isinstance(result, Exception):
+                tqdm.write(f"  Lỗi chunk {i+1}: {result}")
+            elif result is not None and len(result) > 0:
+                all_audio_segments[i] = result
+            else:
+                if text_chunks[i].strip():
+                    tqdm.write(f"  Chunk {i+1}: Không nhận được audio (kết quả rỗng)")
+
+    total_synth_time = time.time() - start_total_synth
+    
+    # Lọc bỏ các phần tử None (do lỗi hoặc trống) để ghép nối an toàn
+    all_audio_segments = [seg for seg in all_audio_segments if seg is not None]
+
+    print(f"\n--- Tổng hợp xong {len(all_audio_segments)}/{num_actual} chunk trong {total_synth_time:.1f}s (Tổng thời gian xử lý của GPU: {total_gpu_time:.1f}s) ---\n")
 
     if not all_audio_segments:
         print("Không có audio nào được tạo ra. Dừng.")
