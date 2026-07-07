@@ -19,7 +19,6 @@ tts_env/
 .venv
 
 # 4. IDEs and Editors
-.vscode/
 .idea/
 *.swp
 *.swo
@@ -50,3 +49,5 @@ Miniconda*.sh
 # !TTS_6_0_vieneu.py
 # !README.md!audio/
 !audio/**
+!.vscode/
+!.vscode/**
