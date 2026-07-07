@@ -49,5 +49,5 @@ Miniconda*.sh
 # !TTS_6_0_vieneu.py
 # !README.md!audio/
 !audio/**
-!.vscode/
-!.vscode/**
+# 8. Testing
+tests/
