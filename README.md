@@ -1,236 +1,134 @@
-﻿# 📖 Tài liệu kỹ thuật chi tiết cho dự án STT-TTS-test
+# 📖 Tài liệu kỹ thuật chi tiết cho dự án STT-TTS-test
 
 > **Mục tiêu**  
-> 1. Mô tả toàn diện kiến trúc, thuật toán, luồng xử lý & các điểm then chốt về công nghệ  
-> 2. Cung cấp hướng dẫn cài đặt và vận hành chi tiết nhằm tái tạo dễ dàng  
-> 3. Giải thích rõ ràng các lựa chọn thiết kế, ưu – nhược, khả năng mở rộng & gợi ý tối ưu hoá  
+> 1. Mô tả toàn diện kiến trúc, thuật toán, luồng xử lý & các điểm then chốt về công nghệ cho hệ thống Text-to-Speech (TTS) thế hệ mới.
+> 2. Cung cấp hướng dẫn cài đặt và vận hành chi tiết nhằm tái tạo dễ dàng, đặc biệt là cách tận dụng tối đa GPU phần cứng.
+> 3. Giải thích rõ ràng các lựa chọn thiết kế, tối ưu hoá bộ nhớ (VRAM) và tốc độ tạo giọng nói.
 
 ---
 
-## 1. Tổng quan kiến trúc
+## 1. Tổng quan kiến trúc hệ thống
 
+Trọng tâm của dự án hiện tại là **Phiên bản 6.0 (`TTS_6_0_vieneu.py`)**. Các phiên bản cũ sử dụng API trực tuyến (gTTS, Edge-TTS) đã được đưa vào kho lưu trữ (`old_scripts/`) do phụ thuộc vào kết nối mạng và giới hạn số lần gọi (Rate Limit).
+
+Phiên bản 6.0 hoàn toàn **OFFLINE 100%**, bảo mật dữ liệu tuyệt đối và chạy siêu tốc trên card đồ họa (GPU).
+
+```text
+┌─────────────────┐       (Đọc file)       ┌────────────────────────┐
+│  run_text.txt   │ ─────────────────────▶ │ Lọc Markdown, Normalize│
+└─────────────────┘                        └────────────────────────┘
+                                                       │
+                                                       ▼
+                                           ┌────────────────────────┐
+                                           │ Chia Chunk (30-40 từ)  │
+                                           └────────────────────────┘
+                                                       │
+               +───────────────────────────────────────┼───────────────────────────────────────+
+               │                                                                               │
+   (GPU) Llama-cpp-python                                                          (CPU) ONNX Runtime
+   Sinh Acoustic Tokens (Tốc độ cao)                                               Giải mã Tokens thành Waveform
+               │                                                                               │
+               +───────────────────────────────────────┼───────────────────────────────────────+
+                                                       ▼
+                                           ┌────────────────────────┐
+                                           │ Ghép Audio & Hậu kỳ    │
+                                           │ (Tốc độ, Cao độ - MP3) │
+                                           └────────────────────────┘
+                                                       │
+                                                       ▼
+                                              doc_len_vieneu.mp3
 ```
-┌────────────┐      MP3/WAV        ┌────────────┐
-│  STT_1_0   │ ───────────────▶   │ Văn bản thô │
-└────────────┘                     └────────────┘
-                                       │
-               +───────────────────────┼───────────────────────────+
-               │                                           │
-      (gTTS) TTS_4_0                            (edge-tts) TTS_5_x
-               │                                           │
-               ▼                                           ▼
-      File MP3 gộp                              File MP3 gộp
+
+---
+
+## 2. Công nghệ cốt lõi & Thư viện
+
+| Thư viện / Công nghệ | Vai trò & Mục đích | Ghi chú |
+| :--- | :--- | :--- |
+| **`vieneu`** | Cung cấp model AI tạo giọng nói tiếng Việt chất lượng cao. | Model 0.3B tham số, chạy offline hoàn toàn. |
+| **`llama-cpp-python`** | Engine cốt lõi để chạy mô hình ngôn ngữ trên GPU. | **Cực kỳ quan trọng**: Cần bản build hỗ trợ CUDA (cu124) để không bị nghẽn ở CPU. |
+| **`librosa`** | Tiền xử lý, hậu kỳ âm thanh (thay đổi tốc độ, cao độ). | Giữ nguyên pitch khi tăng tốc độ (time-stretch). |
+| **`pydub` & `soundfile`** | Xử lý mảng âm thanh, ghi và chuyển đổi định dạng xuất ra MP3. | Phụ thuộc vào `ffmpeg`. |
+| **`tqdm`** | Hiển thị thanh tiến trình (progress bar) trực quan trên Terminal. | |
+
+---
+
+## 3. Phân tích chi tiết mô-đun `TTS_6_0_vieneu.py`
+
+### 3.1. Thuật toán Chunking thông minh (Sequential Batching)
+Khác với các phiên bản trước sử dụng Multi-threading (đa luồng) gây ra lỗi tràn bộ nhớ VRAM (Out-of-Memory) và nghẽn cổ chai (Context Switching) trên GPU, phiên bản 6.0 xử lý theo cơ chế **Chunking nối tiếp**.
+
+- Thuật toán sẽ dùng Regex để tách văn bản gốc thành các câu hoàn chỉnh (dựa trên dấu câu `.` `?` `!`).
+- Kế tiếp, nó sẽ gom các câu ngắn lại thành một khối (chunk) có độ dài khoảng **30-40 từ**.
+- **Lý do:** Mô hình Auto-regressive sẽ sinh từ rất chậm và tốn RAM nếu chuỗi đầu vào quá dài. Mức 30-40 từ (tương đương 10-15s âm thanh) là "điểm ngọt" (sweet spot) giúp GPU nội suy nhanh nhất (lên tới **7.5x Realtime** trên RTX 3060).
+
+### 3.2. Quản lý thiết bị (GPU vs CPU)
+Mô hình TTS của VieNeu gồm 2 phần:
+1. **Backbone (LLM)**: Được offload hoàn toàn 100% layer lên GPU thông qua `llama-cpp-python`.
+2. **Codec Decoder (ONNX)**: Được thiết kế chỉ chạy trên CPU. (Sẽ có cảnh báo vàng khi chạy, đây là hành vi bình thường).
+
+### 3.3. Hậu kỳ (Post-processing)
+Sau khi GPU tạo ra hàng loạt các mảng numpy arrays, code sẽ:
+1. Nối (`np.concatenate`) tất cả thành một mảng âm thanh dài.
+2. Dùng `librosa` áp dụng biến đổi **Pitch Shift** (cao độ) hoặc **Time Stretch** (tốc độ).
+3. Xuất file thông qua `soundfile` tạo file `.wav` tạm, sau đó dùng `pydub` nén lại thành MP3 192kbps chất lượng cao.
+
+---
+
+## 4. Hướng dẫn cài đặt môi trường (Dành riêng cho Linux / Ubuntu có GPU NVIDIA)
+
+Để tránh lỗi thư viện rơi vào trạng thái chạy CPU (cực chậm), vui lòng tuân thủ chính xác các bước dưới đây.
+
+**Bước 1: Tạo và kích hoạt môi trường ảo (Conda/Venv)**
+```bash
+conda create -n tts_env python=3.10 -y
+conda activate tts_env
 ```
 
-Dự án chia theo 2 hướng:
+**Bước 2: Cài đặt các thư viện lõi**
+```bash
+pip install numpy pydub tqdm soundfile torch librosa
+```
 
-1. **Speech-to-Text (STT)**  
-   - Sử dụng `speech_recognition` + `pydub`  
-   - Tự động chuyển MP3 → WAV (khi cần) → Google Speech API
-2. **Text-to-Speech (TTS)**  
-   - **TTS_4_0**: gTTS (Google Translate TTS) + đa luồng (`threading`)  
-   - **TTS_5_0+**: Microsoft Edge-TTS (dịch vụ Neural) + bất đồng bộ (`asyncio`)  
+**Bước 3: Cài đặt thư viện VieNeu**
+```bash
+pip install vieneu[gpu]
+```
 
-Các phiên bản _TTS_ x/y_ thể hiện quá trình tinh chỉnh: từ **đồng bộ → đa luồng → async**, từ **gTTS chất lượng thấp → Edge Neural chất lượng cao**, từ **ghép cuối kỳ → ghép theo tiến độ**.
+**Bước 4: Ép buộc cài đặt `llama-cpp-python` có hỗ trợ CUDA (Quan trọng nhất 🚨)**
+Bản `llama-cpp-python` tải về bằng pip thông thường trên Linux sẽ CHỈ hỗ trợ CPU. Bạn cần gỡ nó ra và cài bản đã được build sẵn cho CUDA (ví dụ CUDA 12.4):
+```bash
+pip uninstall -y llama-cpp-python
+pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu124
+```
+*(Nếu máy bạn dùng bản CUDA khác, hãy thay `cu124` thành `cu118` hoặc `cu121` tương ứng).*
 
----
-
-## 2. Kiến thức nền & thư viện
-
-| Thư viện          | Mục đích                                                                   | Ghi chú cấu hình |
-|-------------------|----------------------------------------------------------------------------|------------------|
-| `speech_recognition` | Gửi WAV tới Google Speech API, nhận về text                              | Cần internet, key miễn phí |
-| `pydub`           | Đọc/ghi MP3, ghép AudioSegment                                            | Phụ thuộc `ffmpeg` |
-| `gtts`            | Tạo file MP3 từ văn bản (dịch vụ Google Translate)                         | Giọng máy, giới hạn 200-300 ký tự/lượt |
-| `edge-tts`        | Microsoft TTS Neural, hỗ trợ SSML, giọng tự nhiên                          | Hỗ trợ async/await |
-| `threading`       | Thực thi đa luồng CPU-bound nhẹ, IO-bound (gTTS)                           | Tránh GIL bottleneck nhờ network-IO |
-| `asyncio`         | EventLoop cho Edge-TTS, scale tốt hàng trăm yêu cầu concurrent             | Bypass GIL |
-| `tempfile`        | Tạo file WAV tạm trong STT                                                | Giảm rác HĐH |
-| `os.startfile`    | Tự mở file MP3 sau khi render (chỉ Windows)                               | Cross-platform cần wrapper |
+**Bước 5: Cài đặt `ffmpeg` (để xuất MP3)**
+```bash
+sudo apt update
+sudo apt install ffmpeg -y
+```
 
 ---
 
-## 3. Phân tích chi tiết từng mô-đun
+## 5. Hướng dẫn sử dụng
 
-### 3.1 STT_1_0.py
-
-1. **Chu trình**  
-   a. Kiểm tra đuôi file. Nếu **.mp3** → convert WAV (nhờ `pydub.AudioSegment.from_mp3`).  
-   b. Mở `sr.AudioFile`, đọc toàn bộ vào bộ nhớ (`recognizer.record`).  
-   c. Gọi `recognizer.recognize_google(audio_data, language="vi-VN")`.  
-   d. Xoá file WAV tạm → trả chuỗi kết quả.
-
-2. **Xử lý lỗi**  
-   - `sr.UnknownValueError`: âm thanh mờ/tiếng ồn  
-   - `sr.RequestError`: đứt mạng, quota hết  
-   - Bọc try/except toàn hàm → in log chi tiết.
-
-3. **Hạn chế & gợi ý cải tiến**  
-   - Chưa cắt nhỏ audio dài > 60 s; API Google dễ timeout.  
-   - Có thể tận dụng `recognizer.record(source, duration=chunk_size)` → ghép text.  
-   - Hỗ trợ đa định dạng (OGG, FLAC) bằng `AudioSegment.from_file`.
-
-### 3.2 TTS_4_0.py (gTTS + đa luồng)
-
-1. **Thuật toán chia văn bản**  
-   - Đếm tổng số từ.  
-   - Nếu ≤ 50: duy nhất 1 chunk (tránh overhead)  
-   - Ngược lại: chia đều `NUM_THREADS` (mặc định 10). Remainder được rải vào các chunk đầu:  
-
-   ```python
-   base_size = total_words // num_threads
-   add_one = 1 if i < remainder else 0
-   ```
-
-2. **Tải song song**  
-   - Mỗi thread tạo `gTTS(text_chunk)` → `.save()` -> file `.tmp`, sau đó `os.rename` (atomic) thành `temp_i.mp3`.  
-   - Delay tuyến tính `index * DELAY_BETWEEN_REQUESTS` để né 429 Too Many Requests.
-
-3. **Progressive Merger**  
-   - Thread riêng quét thư mục `temp_audio_chunks`  
-   - Khi `temp_i.mp3` sẵn sàng → `combined_audio += segment` → xoá file.  
-   - Bảng `status_report` (list[dict]) lưu `download_status`, `merge_status`, `error`.
-
-4. **Độ bền**  
-   - Nếu chunk lỗi tải → đánh dấu “Bỏ qua”, merger vẫn tiếp tục (tạo khoảng trống thời gian).  
-   - Cleanup thư mục tạm kỹ càng, thử xoá 3 lần (đề phòng handle chưa đóng).
-
-### 3.3 TTS_5_0_edgetts.py (Edge Neural + asyncio)
-
-1. **Lý do chuyển sang async**  
-   - `edge-tts` là HTTP streaming → IO-bound mạnh → event-loop tối ưu.  
-   - Khả năng mở rộng giọng (SSML), tốc độ gấp ~3-5 lần gTTS.
-
-2. **Luồng xử lý**  
-
-   ```python
-   tasks = [text_to_audio_chunk_async(chunk, i, voice) for i, chunk in enumerate(text_chunks)]
-   await asyncio.gather(*tasks)
-   ```
-
-   - Mỗi coroutine tự lưu `temp_i.mp3`.  
-   - Sau giai đoạn 1, ghép tuần tự đảm bảo **đúng thứ tự**.
-
-3. **Đổi giọng luân phiên**  
-
-   ```python
-   voice = VOICES_TO_USE[i % len(VOICES_TO_USE)]
-   ```
-
-   • Cho phép mix Nam/Nữ, Bắc/Nam, hoặc đa ngôn ngữ.  
-   • Dễ mở rộng qua config YAML.
-
-4. **Báo cáo & dọn dẹp**: kế thừa bảng thống kê + cleanup từ bản 4.0, nhưng thêm nhãn “Bỏ qua (không tìm thấy)”.
-
-5. **Khả năng mở rộng**  
-   - Tăng `NUM_THREADS` (thực chất là chunk) lên 50-100 vẫn ổn, vì coroutine nhẹ.  
-   - Để tránh memory leak, đọc file theo stream (`AudioSegment.from_file(f, format="mp3")`).
-
----
-
-## 4. So sánh các phiên bản TTS
-
-| Thuộc tính                | TTS_4_0 (gTTS) | TTS_5_x (Edge-TTS) |
-|---------------------------|----------------|--------------------|
-| Mô hình                  | Google Translate | Microsoft Neural |
-| API limit                | 200-300 ký tự/lần | ~1 M ký tự/ngày |
-| Triển khai               | Bộ thread + IO sync | Coroutine async |
-| Chất lượng giọng         | Robot, đơn điệu | Tự nhiên, nhấn nhá |
-| Hỗ trợ SSML              | Không | Có |
-| Khả năng đa ngôn ngữ      | 30+ | 140+ |
-| Tốc độ build 1k từ        | ~20-30 s | ~5-10 s |
-| Độ tin cậy khi spam      | Dễ 429 | Ổn định |
-
----
-
-## 5. Hướng dẫn cài đặt
+Chỉ cần để văn bản cần đọc vào file `run_text.txt` nằm ở cùng thư mục, sau đó chạy:
 
 ```bash
-# 1. Tạo virtualenv
-python -m venv venv
-# 2. Kích hoạt
-.\venv\Scripts\activate   # Windows
-# 3. Cài gói
-pip install -r requirements.txt
-# 4. Cài ffmpeg (Windows)
-choco install ffmpeg      # hoặc tải zip → thêm PATH
+python3 TTS_6_0_vieneu.py
 ```
 
-`requirements.txt` (tham khảo)
+### Chỉnh sửa cấu hình trong code
+Mở file `TTS_6_0_vieneu.py` và sửa các tham số ở phần đầu file:
 
-```
-speechrecognition==3.10.0
-gTTS==2.3.2
-edge-tts==6.1.4
-pydub==0.25.1
-```
+- `VOICE_PRESET_INDEX`: Thay đổi ID giọng đọc (0: Bình, 1: Tuyên, 2: Vĩnh, 3: Đoan, 4: Ly, 5: Ngọc).
+- `SPEED`: Tốc độ nói (1.0 là mặc định, 1.2 là nhanh hơn).
+- `PITCH_SHIFT`: Cao độ (0 là mặc định, -2 là trầm hơn, +2 là cao hơn).
 
 ---
 
-## 6. Chạy thử
-
-### 6.1 STT
-
-```bash
-python STT_1_0.py  # chỉnh file_path trong code hoặc sửa lại thành argparse
-```
-
-### 6.2 TTS gTTS
-
-```bash
-python TTS_4_0.py           # cần run_text.txt chứa nội dung
-```
-
-### 6.3 TTS Edge Neural
-
-```bash
-python TTS_5_0_edgetts.py   # tự động chia chunk, ghép, mở file
-```
-
----
-
-## 7. Thiết kế mở rộng & best-practice
-
-1. **Tách CLI**: dùng `argparse` để tuỳ biến ngôn ngữ, số chunk, voice list.  
-2. **Task Queue**: đưa STT/TTS thành worker Celery → scale horizontal.  
-3. **Caching**: hash nội dung → skip convert nếu file MP3 đã tồn tại.  
-4. **Docker hoá**: đóng gói ffmpeg + Python → tránh thiết lập môi trường phức tạp.  
-5. **Chunking thông minh**:  
-   - Chia theo câu (regex `[.!?]`) giữ giọng tự nhiên.  
-   - Gộp sentence ≤ 1500 ký tự (Edge-TTS max).  
-6. **Parallel Merger**: thay vì ghép tuần tự, có thể tiếp tục ghép song song với khoá RW-lock để tăng tốc.  
-7. **Real-time Streaming**: dùng `edge-tts` WebSocket → phát trực tiếp mà không lưu đĩa.  
-8. **Fault-Tolerance**: ghi checkpoint JSON; nếu dừng giữa chừng, resume từ chunk chưa tải.  
-
----
-
-## 8. Các vấn đề & khuyến nghị bảo trì
-
-| Vấn đề                                            | Triệu chứng                         | Khắc phục |
-|---------------------------------------------------|-------------------------------------|-----------|
-| API 429 (gTTS)                                    | Trace: `TooManyRequests`            | Tăng `DELAY_BETWEEN_REQUESTS`, giảm `NUM_THREADS`, hoặc chuyển Edge-TTS |
-| Lỗi `Could not find ffmpeg`                       | TTS không chạy / merger fail        | Kiểm tra PATH, `ffmpeg -version` |
-| `speech_recognition` hết quota / timeout          | STT trả chuỗi rỗng                  | Cắt nhỏ clip, thêm back-off retry |
-| `PermissionError` khi xoá file tạm                | File vẫn bị handle                    | Thêm `close()` trước xoá, sleep ngắn rồi thử lại |
-| Memory Spike khi ghép file rất dài (>1h)          | Python OOM                           | Ghép theo stream, ghi incremental vào đĩa |
-
----
-
-## 9. Lộ trình phát triển
-
-1. **v6.x** – RESTful API Flask/FastAPI gói STT + TTS  
-2. **v7.x** – UI React/Next.js dựng slideshow + audio  
-3. **v8.x** – Hỗ trợ Azure Cognitive Speech Service (độ chính xác STT cao)  
-4. **v9.x** – Distributed processing với Kafka + MinIO (audio blob storage)  
-
----
-
-## 10. Kết luận
-
-Dự án **STT-TTS-test** minh hoạ quy trình chuyển đổi hai chiều **Âm thanh ↔ Văn bản** với:
-
-• Các lựa chọn thư viện đa dạng (mã nguồn mở, miễn phí, chất lượng cao)  
-• Kỹ thuật **đa luồng** và **bất đồng bộ** để tối ưu hoá IO-bound task  
-• Chiến lược **chia nhỏ → ghép dòng** giúp xử lý file dài hiệu quả  
-• Cấu trúc mã dễ đọc, chú thích tiếng Việt rõ ràng, thuận tiện bảo trì  
-
+## 6. Lộ trình nâng cấp (Roadmap)
+- [ ] Tích hợp API Server (FastAPI) để nhận văn bản từ web/mobile trả về luồng âm thanh trực tiếp (Streaming).
+- [ ] Chuyển đổi mã bộ giải mã (Codec) của ONNX sang TensorRT để đưa luôn công đoạn giải mã lên GPU, tăng tốc độ tổng hợp lên trên mức 15x realtime.
+- [ ] Xây dựng giao diện UI (Streamlit/Gradio) để dễ tương tác hơn.
