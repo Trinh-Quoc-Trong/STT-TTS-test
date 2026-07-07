@@ -1,4 +1,52 @@
+# ==============================================================================
+# PROFESSIONAL .GITIGNORE FOR PYTHON TTS PROJECT
+# ==============================================================================
 
-# Ignore specific files
-run_text.txt
+# 1. Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 2. C extensions
+*.so
+
+# 3. Virtual Environments
+venv/
+env/
+ENV/
+.env
+tts_env/
+.venv
+
+# 4. IDEs and Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# 5. Output / Generated Files (Audio)
 *.mp3
+*.wav
+*.flac
+*.ogg
+audio/
+temp_audio_chunks_edge_stronger/
+output/
+
+# 6. Input / Data files
+run_text.txt
+*.log
+*.tmp
+*.temp
+
+# 7. Old scripts and archives
+old_scripts/
+Miniconda*.sh
+
+# ==============================================================================
+# ALLOW-LIST (What should definitely be committed)
+# ==============================================================================
+# !TTS_6_0_vieneu.py
+# !README.md

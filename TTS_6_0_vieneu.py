@@ -33,14 +33,14 @@ OUTPUT_AUDIO_FILE = "doc_len_vieneu.mp3"
 
 # Chọn giọng preset (None = dùng giọng mặc định 'Xuân Vĩnh' - Nam miền Nam)
 # Chạy script sẽ in danh sách giọng có sẵn để bạn chọn.
-VOICE_PRESET_INDEX = 0  # Đặt số (0, 1, 2...) để chọn giọng khác
+VOICE_PRESET_INDEX = 2  # Đặt số (0, 1, 2...) để chọn giọng khác
 
 # Số chunk chia văn bản (VieNeu xử lý local nên không cần quá nhiều)
 NUM_CHUNKS = 24
 
-MAX_WORKER = 12
+MAX_WORKER = 1
 # VieNeu mode: "standard" (PyTorch GPU), "fast" (LMDeploy GPU), None = Turbo (GGUF CPU)
-VIENEU_MODE = "fast"  # Sử dụng LMDeploy GPU - Tốc độ rất cao
+VIENEU_MODE = "standard"  # Sử dụng LMDeploy GPU - Tốc độ rất cao
 
 SAMPLE_RATE = 24000  # VieNeu output 24kHz
 
@@ -148,6 +148,7 @@ def main():
             init_kwargs["backbone_repo"] = "pnnbao-ump/VieNeu-TTS-0.3B"
             init_kwargs["backbone_device"] = "cuda"
             init_kwargs["codec_device"] = "cuda"
+            init_kwargs["gguf_filename"] = "VieNeu-TTS-0.3B-Q4_K_M.gguf"
             print(f"GPU: {torch.cuda.get_device_name(0)}")
         else:
             print("CUDA không khả dụng, chạy trên CPU")
@@ -177,79 +178,60 @@ def main():
     print(cleaned[:500])
     print("-" * 40)
 
-    text_chunks = split_text_by_sentence(cleaned, NUM_CHUNKS)
-    num_actual = len(text_chunks)
-    print(f"\nĐã chia thành {num_actual} chunk:")
-    for idx, ch in enumerate(text_chunks):
-        preview = ch[:80].replace('\n', ' ')
-        print(f"  [{idx+1}] ({len(ch.split())} từ) {preview}...")
-    print()
 
-    # --- GIAI ĐOẠN 2: SYNTHESIS TỪNG CHUNK ---
-    print("--- Bắt đầu tổng hợp giọng nói (Chạy đa luồng) ---")
-    all_audio_segments = [None] * num_actual
-    total_gpu_time = 0
 
-    def synthesize_chunk(i, chunk):
-        if not chunk.strip():
-            return i, None, 0
-        try:
-            start_chunk = time.time()
-            kwargs = {"text": chunk}
-            if voice_data is not None:
-                kwargs["voice"] = voice_data
-            audio_array = tts.infer(**kwargs)
-            chunk_time = time.time() - start_chunk
-            return i, audio_array, chunk_time
-        except Exception as e:
-            return i, e, 0
-
-    start_total_synth = time.time()
-
-    # --- ẨN CÁC LỖI [TM][ERROR] TỪ C++ CỦA LMDEPLOY ---
-    import sys
-    fd = sys.stderr.fileno()
-    devnull = os.open(os.devnull, os.O_WRONLY)
-    save_fd = os.dup(fd)
-    os.dup2(devnull, fd)
-
-    try:
-        # Sử dụng ThreadPoolExecutor để chạy song song 4 luồng
-        max_workers = MAX_WORKER 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = {executor.submit(synthesize_chunk, i, text_chunks[i]): i for i in range(num_actual)}
-            
-            for future in tqdm(concurrent.futures.as_completed(futures), total=num_actual, desc="Tổng hợp", unit="chunk", file=sys.stdout):
-                i, result, c_time = future.result()
-                total_gpu_time += c_time
-                if isinstance(result, Exception):
-                    tqdm.write(f"  Lỗi chunk {i+1}: {result}")
-                elif result is not None and len(result) > 0:
-                    all_audio_segments[i] = result
-                else:
-                    if text_chunks[i].strip():
-                        tqdm.write(f"  Chunk {i+1}: Không nhận được audio (kết quả rỗng)")
-    finally:
-        # --- KHÔI PHỤC LẠI STDERR ---
-        os.dup2(save_fd, fd)
-        os.close(devnull)
-        os.close(save_fd)
-
-    total_synth_time = time.time() - start_total_synth
+    # Chia văn bản thành các câu/đoạn ngắn (khoảng 30-50 từ/chunk)
+    sentences = re.split(r'(?<=[.!?。\n])\s+', cleaned.strip())
+    sentences = [s.strip() for s in sentences if s.strip()]
     
-    # Lọc bỏ các phần tử None (do lỗi hoặc trống) để ghép nối an toàn
-    all_audio_segments = [seg for seg in all_audio_segments if seg is not None]
+    chunks = []
+    current_chunk = []
+    current_len = 0
+    for s in sentences:
+        words = len(s.split())
+        if current_len + words > 40 and current_chunk:
+            chunks.append(" ".join(current_chunk))
+            current_chunk = [s]
+            current_len = words
+        else:
+            current_chunk.append(s)
+            current_len += words
+    if current_chunk:
+        chunks.append(" ".join(current_chunk))
 
-    print(f"\n--- Tổng hợp xong {len(all_audio_segments)}/{num_actual} chunk trong {total_synth_time:.1f}s (Tổng thời gian xử lý của GPU: {total_gpu_time:.1f}s) ---\n")
+    if not chunks:
+        chunks = [cleaned]
 
-    if not all_audio_segments:
+    print(f"\n--- Đã chia thành {len(chunks)} chunks để xử lý tối ưu ---")
+    
+    all_audio_segments = []
+    start_time = time.time()
+    try:
+        from tqdm import tqdm
+        for i, chunk in enumerate(tqdm(chunks, desc="Tổng hợp chunks")):
+            # Gọi tts.infer cho từng chunk
+            audio = tts.infer(chunk, voice=voice_data)
+            if hasattr(audio, 'cpu'):
+                audio = audio.cpu().numpy()
+            all_audio_segments.append(audio)
+            
+        combined = np.concatenate(all_audio_segments)
+        
+    except Exception as e:
+        print(f"Lỗi: {e}")
+        return
+        
+    total_synth_time = time.time() - start_time
+    print(f"\n--- Tổng hợp xong trong {total_synth_time:.1f}s ---\n")
+
+    if combined is None or len(combined) == 0:
         print("Không có audio nào được tạo ra. Dừng.")
         tts.close()
         return
 
-    # --- GIAI ĐOẠN 3: GHÉP + HẬU KỲ + XUẤT FILE ---
-    print("Đang ghép audio...")
-    combined = np.concatenate(all_audio_segments)
+    # --- GIAI ĐOẠN 3: HẬU KỲ + XUẤT FILE ---
+
+    # --- GIAI ĐOẠN 3: HẬU KỲ + XUẤT FILE ---
 
     # Chỉnh cao độ (pitch) bằng librosa
     if PITCH_SHIFT != 0:
@@ -292,9 +274,16 @@ def main():
         pass
 
     # Mở file
-    if sys.platform == "win32" and os.path.exists(final_audio_path):
+    if os.path.exists(final_audio_path):
         print(f"\nĐang mở file audio...")
-        os.startfile(final_audio_path)
+        if sys.platform == "win32":
+            os.startfile(final_audio_path)
+        elif sys.platform.startswith('linux'):
+            import subprocess
+            subprocess.call(['xdg-open', final_audio_path])
+        elif sys.platform == "darwin":
+            import subprocess   
+            subprocess.call(['open', final_audio_path])
 
 
 if __name__ == "__main__":
@@ -302,7 +291,3 @@ if __name__ == "__main__":
         main()
     except KeyboardInterrupt:
         print("\nĐã dừng chương trình.")
-    except Exception as e:
-        print(f"\nLỗi không xác định: {e}")
-        import traceback
-        traceback.print_exc()
