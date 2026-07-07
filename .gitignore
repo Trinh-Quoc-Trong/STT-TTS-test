@@ -31,7 +31,6 @@ tts_env/
 *.wav
 *.flac
 *.ogg
-audio/
 temp_audio_chunks_edge_stronger/
 output/
 
@@ -49,4 +48,5 @@ Miniconda*.sh
 # ALLOW-LIST (What should definitely be committed)
 # ==============================================================================
 # !TTS_6_0_vieneu.py
-# !README.md
+# !README.md!audio/
+!audio/**
