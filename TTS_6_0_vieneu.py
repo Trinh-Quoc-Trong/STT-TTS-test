@@ -44,9 +44,10 @@ VIENEU_MODE = "standard"  # Sử dụng LMDeploy GPU - Tốc độ rất cao
 
 SAMPLE_RATE = 24000  # VieNeu output 24kHz
 
-# --- CHỈNH GIỌNG (HẬU KỲ) ---
-# Tốc độ nói: 1.0 = bình thường, 1.2 = nhanh hơn 20%, 0.8 = chậm hơn 20%
-SPEED = 1.0
+# --- CHỈNH GIỌNG (HẬU KỲ BẰNG TOOL BÊN NGOÀI FFmpeg) ---
+# Tốc độ nói: 1.0 = bình thường, 1.25 = nhanh hơn 25%, 1.5 = nhanh hơn 50%
+# Hoàn toàn dùng phần mềm bên ngoài xử lý sau khi AI đã tạo xong audio!
+SPEED = 1.5
 
 # Cao độ (semitones): 0 = bình thường, -2 = trầm hơn, +2 = cao hơn
 # Khoảng hợp lý: -5 đến +5
@@ -233,20 +234,6 @@ def main():
 
     # --- GIAI ĐOẠN 3: HẬU KỲ + XUẤT FILE ---
 
-    # Chỉnh cao độ (pitch) bằng librosa
-    if PITCH_SHIFT != 0:
-        import librosa
-        print(f"Chỉnh cao độ: {PITCH_SHIFT:+} semitones...")
-        combined = librosa.effects.pitch_shift(
-            combined, sr=SAMPLE_RATE, n_steps=PITCH_SHIFT
-        )
-
-    # Chỉnh tốc độ bằng librosa (time_stretch giữ nguyên pitch)
-    if SPEED != 1.0:
-        import librosa
-        print(f"Chỉnh tốc độ: {SPEED}x...")
-        combined = librosa.effects.time_stretch(combined, rate=SPEED)
-
     if hasattr(combined, 'cpu'):
         combined = combined.cpu().numpy()
     combined = np.asarray(combined, dtype=np.float32)
@@ -255,6 +242,29 @@ def main():
 
     temp_wav = os.path.join(temp_dir, "combined.wav")
     sf.write(temp_wav, combined, SAMPLE_RATE)
+
+    # Chỉnh cao độ (pitch) bằng librosa (nếu có)
+    if PITCH_SHIFT != 0:
+        import librosa
+        print(f"Chỉnh cao độ: {PITCH_SHIFT:+} semitones...")
+        y, sr = librosa.load(temp_wav, sr=SAMPLE_RATE)
+        y_shifted = librosa.effects.pitch_shift(y, sr=sr, n_steps=PITCH_SHIFT)
+        sf.write(temp_wav, y_shifted, SAMPLE_RATE)
+
+    # Chỉnh tốc độ bằng FFmpeg (Công cụ bên ngoài, không đổi tham số mô hình AI)
+    if SPEED != 1.0:
+        import subprocess
+        print(f"Sử dụng công cụ bên ngoài (FFmpeg) để chỉnh tốc độ: {SPEED}x...")
+        print("=> Audio đang được xử lý hậu kỳ bằng FFmpeg độc lập với mô hình AI.")
+        temp_speed_wav = os.path.join(temp_dir, "combined_speed.wav")
+        # Lệnh FFmpeg: atempo cho phép tăng giảm tốc độ mà không bị méo tiếng
+        cmd = [
+            "ffmpeg", "-y", "-i", temp_wav, 
+            "-filter:a", f"atempo={SPEED}", 
+            temp_speed_wav
+        ]
+        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        temp_wav = temp_speed_wav
 
     audio_seg = AudioSegment.from_wav(temp_wav)
     audio_seg.export(final_audio_path, format="mp3", bitrate="192k")
