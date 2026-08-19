@@ -1,3 +1,7 @@
+# 
+# /home/t9/miniconda3/envs/tts_env/bin/python /home/t9/code/phanMemDoc/TTS_6_0_vieneu.py
+# 
+# 
 # -*- coding: utf-8 -*-
 # PHIÊN BẢN 6.0 - VieNeu-TTS (OFFLINE, GPU)
 # Thay thế edge-tts bằng VieNeu-TTS: offline 100%, không bị throttle,
